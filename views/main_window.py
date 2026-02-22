@@ -209,8 +209,8 @@ class MainWindow(QMainWindow):
     def new_calculation(self):
         """Начать новый расчет"""
         reply = QMessageBox.question(self, "Новый расчет",
-                                     "Начать новый расчет? Все несохраненные данные будут потеряны.",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                                    "Начать новый расчет? Все несохраненные данные будут потеряны.",
+                                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
         if reply == QMessageBox.StandardButton.Yes:
             self.input_tab.reset_to_defaults()
@@ -271,10 +271,10 @@ class MainWindow(QMainWindow):
 
         if filename:
             if self.export_manager.export_to_pdf(
-                    self.current_solution,
-                    self.current_constraints_df,
-                    self.current_allocation_df,
-                    filename
+                self.current_solution,
+                self.current_constraints_df,
+                self.current_allocation_df,
+                filename
             ):
                 self.status_bar.showMessage(f"Отчет сохранен: {filename}")
 
@@ -289,36 +289,102 @@ class MainWindow(QMainWindow):
 
         if filename:
             if self.export_manager.export_to_excel(
-                    self.current_solution,
-                    self.current_constraints_df,
-                    self.current_allocation_df,
-                    filename
+                self.current_solution,
+                self.current_constraints_df,
+                self.current_allocation_df,
+                filename
             ):
                 self.status_bar.showMessage(f"Отчет сохранен: {filename}")
 
     def show_about(self):
         """Отображение информации о программе"""
-        QMessageBox.about(self, "О программе",
-                          f"{APP_NAME}\nВерсия {APP_VERSION}\n\n"
-                          "Разработано в рамках курсовой работы\n"
-                          "по дисциплине 'Методы оптимизации'\n\n"
-                          "Вариант №10 - Задача Г. Альба")
+        about_text = """
+        <div style='text-align: center;'>
+            <h2 style='color: #1560BD;'>Инвестиционный оптимизатор</h2>
+            <p style='font-size: 14px; color: #666;'>Версия 1.0.0</p>
+            <hr style='border: 1px solid #1560BD; width: 80%;'>
+
+            <p style='text-align: left; margin: 15px;'>
+                <b>Назначение:</b> Решение задачи оптимизации инвестиционного портфеля
+                (вариант №10 курсовой работы по дисциплине 'Методы оптимизации')
+            </p>
+
+            <p style='text-align: left; margin: 15px;'>
+                <b>Суть программы:</b> Минимизация начального целевого фонда для выполнения
+                платежей по контракту (200 млн руб через 2 месяца и 700 млн руб через 6 месяцев)
+                путем оптимального распределения инвестиций между четырьмя типами инструментов
+                (A, B, C, O) с учетом ограничений по риску и сроку погашения.
+            </p>
+
+            <div style='background-color: #F0F4FA; padding: 15px; border-radius: 10px; margin: 15px;'>
+                <p style='margin: 5px;'><b>Разработчик:</b> Зубенко Диана Сергеевна</p>
+                <p style='margin: 5px;'><b>Учебное заведение:</b> ФГБОУ ВО «Кубанский государственный технологический университет» (КубГТУ)</p>
+                <p style='margin: 5px;'><b>Факультет:</b> Компьютерных систем и информационной безопасности (КСИБ)</p>
+                <p style='margin: 5px;'><b>Кафедра:</b> Информационных систем и программирования (ИСП)</p>
+                <p style='margin: 5px;'><b>Курс:</b> 3</p>
+                <p style='margin: 5px;'><b>Группа:</b> 23-КБ-ПР1</p>
+                <p style='margin: 5px;'><b>Год разработки:</b> 2026</p>
+            </div>
+
+            <p style='color: #666; font-style: italic; margin: 10px;'>
+                Руководитель: канд. техн. наук, доц. М.В. Янаева
+            </p>
+
+            <hr style='border: 1px solid #1560BD; width: 80%;'>
+            <p style='color: #999;'>© 2026 КубГТУ, кафедра ИСП</p>
+        </div>
+        """
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("О программе")
+        msg_box.setTextFormat(Qt.TextFormat.RichText)
+        msg_box.setText(about_text)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
 
     def show_guide(self):
         """Отображение руководства пользователя"""
         guide_text = """
-        Руководство пользователя:
+           <div style='margin: 10px;'>
+               <h3 style='color: #1560BD;'>📖 Руководство пользователя</h3>
 
-        1. Введите исходные данные на вкладке "Ввод данных"
-        2. Выберите режим расчета:
-           - Без ограничений - минимизация без учета риска и срока
-           - С учетом риска - с ограничением по риску
-           - Полный расчет - с ограничениями по риску и сроку
+               <div style='margin: 15px 0;'>
+                   <h4 style='color: #1560BD;'>1. Ввод исходных данных</h4>
+                   <p>• Заполните параметры контракта (суммы платежей через 2 и 6 месяцев)<br>
+                   • Просмотрите характеристики инвестиционных инструментов<br>
+                   • Укажите ограничения по риску и сроку погашения</p>
+               </div>
 
-        3. Просмотрите результаты на соответствующих вкладках
-        4. При необходимости экспортируйте отчет в PDF или Excel
+               <div style='margin: 15px 0;'>
+                   <h4 style='color: #1560BD;'>2. Выбор режима расчета</h4>
+                   <p>• <b>Без ограничений</b> - минимизация без учета риска и срока<br>
+                   • <b>С учетом риска</b> - с ограничением средневзвешенного риска ≤ 6<br>
+                   • <b>Полный расчет</b> - с ограничениями по риску и сроку ≤ 2.5 месяца</p>
+               </div>
 
-        Для сохранения проекта используйте меню Файл -> Сохранить проект
+               <div style='margin: 15px 0;'>
+                   <h4 style='color: #1560BD;'>3. Просмотр результатов</h4>
+                   <p>• <b>Результаты</b> - табличные данные и анализ ограничений<br>
+                   • <b>Графики</b> - визуализация структуры портфеля и динамики показателей<br>
+                   • <b>Анализ</b> - детальная информация и ответы на вопросы задания</p>
+               </div>
+
+               <div style='margin: 15px 0;'>
+                   <h4 style='color: #1560BD;'>4. Сохранение и экспорт</h4>
+                   <p>• <b>Сохранить проект</b> (JSON) - для последующей загрузки<br>
+                   • <b>Экспорт в Excel</b> - полный отчет с несколькими листами<br>
+                   • <b>Экспорт в PDF</b> - форматированный отчет для печати</p>
+               </div>
+
+               <div style='background-color: #F0F4FA; padding: 10px; border-radius: 5px; margin-top: 20px;'>
+                   <p style='color: #1560BD; font-weight: bold;'>❓ Ответы на вопросы задания</p>
+                   <p>Программа автоматически формирует ответы на все вопросы варианта №10:<br>
+                   - размер целевого фонда без ограничений<br>
+                   - необходимость инвестиций вида А в месяце 1<br>
+                   - размер фонда с учетом риска<br>
+                   - размер фонда с учетом всех ограничений</p>
+               </div>
+                </div>
         """
 
         QMessageBox.information(self, "Руководство пользователя", guide_text)
