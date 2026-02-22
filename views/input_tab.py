@@ -34,13 +34,13 @@ class InputTab(QWidget):
         self.payment_2_edit = QLineEdit(str(self.payments[2]))
         self.payment_2_edit.setValidator(QDoubleValidator(0, 10000, 2))
         contract_layout.addWidget(self.payment_2_edit, 0, 1)
-        contract_layout.addWidget(QLabel("млн руб"), 0, 2)
+        contract_layout.addWidget(QLabel("тыс. руб"), 0, 2)
 
         contract_layout.addWidget(QLabel("Платеж через 6 месяцев:"), 1, 0)
         self.payment_6_edit = QLineEdit(str(self.payments[6]))
         self.payment_6_edit.setValidator(QDoubleValidator(0, 10000, 2))
         contract_layout.addWidget(self.payment_6_edit, 1, 1)
-        contract_layout.addWidget(QLabel("млн руб"), 1, 2)
+        contract_layout.addWidget(QLabel("тыс. руб"), 1, 2)
 
         contract_group.setLayout(contract_layout)
         layout.addWidget(contract_group)

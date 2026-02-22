@@ -1,6 +1,7 @@
 """
 Модуль главного окна приложения
 """
+from turtle import pd
 
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
@@ -158,53 +159,63 @@ class MainWindow(QMainWindow):
     def run_calculation(self, mode: str):
         """
         Запуск расчета в выбранном режиме
-
-        Args:
-            mode: режим расчета ('basic', 'risk', 'full')
         """
-        self.status_bar.showMessage(f"Выполняется расчет ({mode})...")
-        QApplication.processEvents()
+        try:
+            self.status_bar.showMessage(f"Выполняется расчет ({mode})...")
+            QApplication.processEvents()
 
-        # Получение исходных данных
-        input_data = self.input_tab.get_input_data()
+            # Получение исходных данных
+            input_data = self.input_tab.get_input_data()
 
-        if not input_data['success']:
-            QMessageBox.warning(self, "Ошибка ввода", input_data.get('error', 'Неизвестная ошибка'))
-            self.status_bar.showMessage("Ошибка ввода данных")
-            return
+            if not input_data['success']:
+                QMessageBox.warning(self, "Ошибка ввода", input_data.get('error', 'Неизвестная ошибка'))
+                self.status_bar.showMessage("Ошибка ввода данных")
+                return
 
-        # Построение модели
-        model = self.optimizer.build_model(
-            investments=input_data['investments'],
-            payments=input_data['payments'],
-            risk_limit=input_data['risk_limit'],
-            duration_limit=input_data['duration_limit'],
-            mode=mode
-        )
+            print(f"\n🔴 ЗАПУСК РАСЧЕТА В РЕЖИМЕ: {mode}")
 
-        # Решение
-        solution = self.optimizer.solve(model)
+            # Построение модели
+            model = self.optimizer.build_model(
+                investments=input_data['investments'],
+                payments=input_data['payments'],
+                risk_limit=input_data['risk_limit'],
+                duration_limit=input_data['duration_limit'],
+                mode=mode
+            )
 
-        # Сохранение результатов
-        self.current_solution = solution
+            # Решение в зависимости от режима
+            if mode == 'basic':
+                # Для basic используем специальный метод поиска оптимального пути
+                solution = self.optimizer.solve_basic(model)
+            else:
+                # Для risk и full используем обычный solve
+                solution = self.optimizer.solve(model)
 
-        # Получение таблиц для отображения
-        self.current_constraints_df = self.optimizer.check_constraints(solution)
-        self.current_allocation_df = self.optimizer.get_allocation_dataframe(solution)
+            # Сохранение результатов
+            self.current_solution = solution
 
-        # Обновление вкладок
-        self.results_tab.display_results(solution, self.current_constraints_df, self.current_allocation_df)
-        self.charts_tab.set_solution(solution)
-        self.analysis_tab.set_data(solution, self.current_constraints_df, self.current_allocation_df)
+            # Получение таблиц для отображения
+            self.current_constraints_df = self.optimizer.check_constraints(solution)
+            self.current_allocation_df = self.optimizer.get_allocation_dataframe(solution)
 
-        # Переключение на вкладку результатов
-        self.tab_widget.setCurrentIndex(1)
+            # Обновление вкладок
+            self.results_tab.display_results(solution, self.current_constraints_df, self.current_allocation_df)
+            self.charts_tab.set_solution(solution)
+            self.analysis_tab.set_data(solution, self.current_constraints_df, self.current_allocation_df)
 
-        mode_names = {'basic': 'без ограничений', 'risk': 'с риском', 'full': 'полный'}
-        if solution['success']:
-            self.status_bar.showMessage(f"Расчет ({mode_names[mode]}) выполнен успешно")
-        else:
-            self.status_bar.showMessage(f"Ошибка при расчете: {solution['message']}")
+            # Переключение на вкладку результатов
+            self.tab_widget.setCurrentIndex(1)
+
+            mode_names = {'basic': 'без ограничений', 'risk': 'с риском', 'full': 'полный'}
+            if solution['success']:
+                self.status_bar.showMessage(f"✅ Расчет ({mode_names[mode]}) выполнен успешно")
+            else:
+                self.status_bar.showMessage(f"❌ Ошибка при расчете: {solution['message']}")
+
+        except Exception as e:
+            print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}")
+            traceback.print_exc()
+            QMessageBox.critical(self, "Ошибка", f"Критическая ошибка: {str(e)}")
 
     def new_calculation(self):
         """Начать новый расчет"""
@@ -298,93 +309,147 @@ class MainWindow(QMainWindow):
 
     def show_about(self):
         """Отображение информации о программе"""
-        about_text = """
-        <div style='text-align: center;'>
-            <h2 style='color: #1560BD;'>Инвестиционный оптимизатор</h2>
-            <p style='font-size: 14px; color: #666;'>Версия 1.0.0</p>
-            <hr style='border: 1px solid #1560BD; width: 80%;'>
-
-            <p style='text-align: left; margin: 15px;'>
-                <b>Назначение:</b> Решение задачи оптимизации инвестиционного портфеля
-                (вариант №10 курсовой работы по дисциплине 'Методы оптимизации')
-            </p>
-
-            <p style='text-align: left; margin: 15px;'>
-                <b>Суть программы:</b> Минимизация начального целевого фонда для выполнения
-                платежей по контракту (200 млн руб через 2 месяца и 700 млн руб через 6 месяцев)
-                путем оптимального распределения инвестиций между четырьмя типами инструментов
-                (A, B, C, O) с учетом ограничений по риску и сроку погашения.
-            </p>
-
-            <div style='background-color: #F0F4FA; padding: 15px; border-radius: 10px; margin: 15px;'>
-                <p style='margin: 5px;'><b>Разработчик:</b> Зубенко Диана Сергеевна</p>
-                <p style='margin: 5px;'><b>Учебное заведение:</b> ФГБОУ ВО «Кубанский государственный технологический университет» (КубГТУ)</p>
-                <p style='margin: 5px;'><b>Факультет:</b> Компьютерных систем и информационной безопасности (КСИБ)</p>
-                <p style='margin: 5px;'><b>Кафедра:</b> Информационных систем и программирования (ИСП)</p>
-                <p style='margin: 5px;'><b>Курс:</b> 3</p>
-                <p style='margin: 5px;'><b>Группа:</b> 23-КБ-ПР1</p>
-                <p style='margin: 5px;'><b>Год разработки:</b> 2026</p>
-            </div>
-
-            <p style='color: #666; font-style: italic; margin: 10px;'>
-                Руководитель: канд. техн. наук, доц. М.В. Янаева
-            </p>
-
-            <hr style='border: 1px solid #1560BD; width: 80%;'>
-            <p style='color: #999;'>© 2026 КубГТУ, кафедра ИСП</p>
-        </div>
-        """
-
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("О программе")
-        msg_box.setTextFormat(Qt.TextFormat.RichText)
-        msg_box.setText(about_text)
-        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        msg_box.exec()
+        dialog = AboutDialog(self)
+        dialog.exec()
 
     def show_guide(self):
         """Отображение руководства пользователя"""
-        guide_text = """
-           <div style='margin: 10px;'>
-               <h3 style='color: #1560BD;'>📖 Руководство пользователя</h3>
+        dialog = GuideDialog(self)
+        dialog.exec()
 
-               <div style='margin: 15px 0;'>
-                   <h4 style='color: #1560BD;'>1. Ввод исходных данных</h4>
-                   <p>• Заполните параметры контракта (суммы платежей через 2 и 6 месяцев)<br>
-                   • Просмотрите характеристики инвестиционных инструментов<br>
-                   • Укажите ограничения по риску и сроку погашения</p>
-               </div>
 
-               <div style='margin: 15px 0;'>
-                   <h4 style='color: #1560BD;'>2. Выбор режима расчета</h4>
-                   <p>• <b>Без ограничений</b> - минимизация без учета риска и срока<br>
-                   • <b>С учетом риска</b> - с ограничением средневзвешенного риска ≤ 6<br>
-                   • <b>Полный расчет</b> - с ограничениями по риску и сроку ≤ 2.5 месяца</p>
-               </div>
+class AboutDialog(QDialog):
+    """Диалоговое окно 'О программе'"""
 
-               <div style='margin: 15px 0;'>
-                   <h4 style='color: #1560BD;'>3. Просмотр результатов</h4>
-                   <p>• <b>Результаты</b> - табличные данные и анализ ограничений<br>
-                   • <b>Графики</b> - визуализация структуры портфеля и динамики показателей<br>
-                   • <b>Анализ</b> - детальная информация и ответы на вопросы задания</p>
-               </div>
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("О программе")
+        self.resize(1000, 600)  # Используем resize вместо setMinimumWidth
 
-               <div style='margin: 15px 0;'>
-                   <h4 style='color: #1560BD;'>4. Сохранение и экспорт</h4>
-                   <p>• <b>Сохранить проект</b> (JSON) - для последующей загрузки<br>
-                   • <b>Экспорт в Excel</b> - полный отчет с несколькими листами<br>
-                   • <b>Экспорт в PDF</b> - форматированный отчет для печати</p>
-               </div>
+        layout = QVBoxLayout()
+        layout.setContentsMargins(30, 30, 30, 30)
 
-               <div style='background-color: #F0F4FA; padding: 10px; border-radius: 5px; margin-top: 20px;'>
-                   <p style='color: #1560BD; font-weight: bold;'>❓ Ответы на вопросы задания</p>
-                   <p>Программа автоматически формирует ответы на все вопросы варианта №10:<br>
-                   - размер целевого фонда без ограничений<br>
-                   - необходимость инвестиций вида А в месяце 1<br>
-                   - размер фонда с учетом риска<br>
-                   - размер фонда с учетом всех ограничений</p>
-               </div>
-                </div>
-        """
+        # Текст с информацией
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setHtml("""
+        <div style='text-align: center; font-family: Segoe UI, Arial, sans-serif;'>
+            <h2 style='color: #1560BD; margin: 20px 0; font-size: 24px;'>Инвестиционный оптимизатор</h2>
+            <p style='font-size: 18px; color: #666; margin: 15px 0;'>Версия 1.0.0</p>
+            <hr style='border: 2px solid #1560BD; width: 95%; margin: 25px auto;'>
 
-        QMessageBox.information(self, "Руководство пользователя", guide_text)
+            <div style='text-align: left; margin: 25px 35px;'>
+                <p style='margin: 20px 0; font-size: 12px; line-height: 1.8;'><b>Назначение:</b> Решение задачи оптимизации инвестиционного портфеля
+                (вариант №10 курсовой работы по дисциплине 'Методы оптимизации')</p>
+
+                <p style='margin: 20px 0; font-size: 12px; line-height: 1.8;'><b>Суть программы:</b> Минимизация начального целевого фонда для выполнения
+                платежей по контракту (200 млн руб через 2 месяца и 700 млн руб через 6 месяцев)
+                путем оптимального распределения инвестиций между четырьмя типами инструментов
+                (A, B, C, O) с учетом ограничений по риску и сроку погашения.</p>
+            </div>
+
+            <div style='background-color: #F0F4FA; padding: 25px; border-radius: 10px; margin: 25px 35px; text-align: left;'>
+                <p style='margin: 15px 0; font-size: 12px;'><b>Разработчик:</b> Зубенко Диана Сергеевна</p>
+                <p style='margin: 15px 0; font-size: 12px;'><b>Учебное заведение:</b> ФГБОУ ВО «Кубанский государственный технологический университет» (КубГТУ)</p>
+                <p style='margin: 15px 0; font-size: 12px;'><b>Факультет:</b> Компьютерных систем и информационной безопасности (КСИБ)</p>
+                <p style='margin: 15px 0; font-size: 12px;'><b>Кафедра:</b> Информационных систем и программирования (ИСП)</p>
+                <p style='margin: 15px 0; font-size: 12px;'><b>Курс:</b> 3</p>
+                <p style='margin: 15px 0; font-size: 12px;'><b>Группа:</b> 23-КБ-ПР1</p>
+                <p style='margin: 15px 0; font-size: 12px;'><b>Год разработки:</b> 2026</p>
+            </div>
+
+            <p style='color: #666; font-style: italic; margin: 25px 0; font-size: 12px;'>
+                Руководитель: канд. техн. наук, доц. М.В. Янаева
+            </p>
+
+            <hr style='border: 2px solid #1560BD; width: 95%; margin: 25px auto;'>
+            <p style='color: #999; margin: 20px 0; font-size: 16px;'>© 2026 КубГТУ, кафедра ИСП</p>
+        </div>
+        """)
+
+        layout.addWidget(text_edit)
+
+        # Кнопка закрытия
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        button_box.accepted.connect(self.accept)
+        layout.addWidget(button_box)
+
+        self.setLayout(layout)
+
+
+class GuideDialog(QDialog):
+    """Диалоговое окно 'Руководство пользователя' с увеличенным размером"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Руководство пользователя")
+        # Увеличиваем размер в 2 раза
+        self.setMinimumWidth(900)
+        self.setMinimumHeight(600)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(30, 30, 30, 30)
+
+        # Текст с руководством
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setFont(QFont("Segoe UI", 12))
+        text_edit.setHtml("""
+        <div style='font-family: Segoe UI, Arial, sans-serif; margin: 20px;'>
+            <h2 style='color: #1560BD; text-align: center; margin: 25px 0 35px 0; font-size: 28px;'>📖 Руководство пользователя</h2>
+
+            <div style='margin: 35px 30px;'>
+                <h3 style='color: #1560BD; margin: 25px 0 20px 0; font-size: 22px;'>1. Ввод исходных данных</h3>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• Заполните параметры контракта (суммы платежей через 2 и 6 месяцев)</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• Просмотрите характеристики инвестиционных инструментов (можно сбросить к значениям по умолчанию)</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• Укажите ограничения по риску и сроку погашения</p>
+            </div>
+
+            <div style='margin: 35px 30px;'>
+                <h3 style='color: #1560BD; margin: 25px 0 20px 0; font-size: 22px;'>2. Выбор режима расчета</h3>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Без ограничений</b> - минимизация начального фонда без учета риска и срока</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>С учетом риска</b> - с ограничением средневзвешенного риска ≤ 6</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Полный расчет</b> - с ограничениями по риску и сроку погашения ≤ 2.5 месяца</p>
+            </div>
+
+            <div style='margin: 35px 30px;'>
+                <h3 style='color: #1560BD; margin: 25px 0 20px 0; font-size: 22px;'>3. Просмотр результатов</h3>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Вкладка "Результаты"</b> - табличные данные и анализ ограничений</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Вкладка "Графики"</b> - визуализация структуры портфеля и динамики показателей</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Вкладка "Анализ"</b> - детальная информация и ответы на вопросы задания</p>
+            </div>
+
+            <div style='margin: 35px 30px;'>
+                <h3 style='color: #1560BD; margin: 25px 0 20px 0; font-size: 22px;'>4. Сохранение и экспорт</h3>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Сохранить проект (JSON)</b> - для последующей загрузки</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Экспорт в Excel</b> - полный отчет с несколькими листами</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Экспорт в PDF</b> - форматированный отчет для печати</p>
+            </div>
+
+            <div style='background-color: #F0F4FA; padding: 30px; border-radius: 10px; margin: 35px 30px;'>
+                <h3 style='color: #1560BD; margin: 0 0 20px 0; font-size: 22px;'>❓ Ответы на вопросы задания</h3>
+                <p style='margin: 15px 0; font-size: 18px;'>Программа автоматически формирует ответы на все вопросы варианта №10:</p>
+                <p style='margin: 10px 0 10px 35px; font-size: 14px;'>- размер целевого фонда без ограничений</p>
+                <p style='margin: 10px 0 10px 35px; font-size: 14px;'>- необходимость инвестиций вида А в месяце 1</p>
+                <p style='margin: 10px 0 10px 35px; font-size: 14px;'>- размер фонда с учетом риска</p>
+                <p style='margin: 10px 0 10px 35px; font-size: 14px;'>- размер фонда с учетом всех ограничений</p>
+            </div>
+
+            <p style='text-align: center; color: #666; margin: 35px 0 25px 0; font-size: 16px;'>
+                Для получения дополнительной информации обратитесь к разработчику
+            </p>
+        </div>
+        """)
+
+        layout.addWidget(text_edit)
+
+        # Кнопка закрытия
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
+        ok_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
+        ok_button.setText("Закрыть")
+        ok_button.setMinimumWidth(150)
+        ok_button.setMinimumHeight(40)
+        button_box.accepted.connect(self.accept)
+        layout.addWidget(button_box)
+
+        self.setLayout(layout)

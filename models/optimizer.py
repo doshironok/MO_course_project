@@ -1,126 +1,159 @@
 """
 Модуль оптимизатора инвестиционного портфеля
-Реализует математическую модель и алгоритмы решения задачи линейного программирования
 """
 
 import numpy as np
 from scipy.optimize import linprog
 import pandas as pd
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Dict, List
+import sys
+import traceback
 
 
 class InvestmentOptimizer:
-    """
-    Класс для оптимизации инвестиционного портфеля
-    """
-
     def __init__(self):
-        """Инициализация оптимизатора"""
-        self.variables = []  # Список переменных решения
+        self.variables = []
+        self.var_names = []
         self.investments = None
         self.payments = None
         self.risk_limit = None
         self.duration_limit = None
 
     def _generate_variables(self, investments: List[Dict]) -> List[Dict]:
-        """
-        Генерация списка переменных решения
-
-        Args:
-            investments: список характеристик инвестиционных инструментов
-
-        Returns:
-            список словарей с переменными
-        """
+        """Генерация переменных"""
         variables = []
+        self.var_names = []
+
         for inv in investments:
             for month in inv['start_months']:
-                variables.append({
+                return_month = month + inv['duration']
+
+                var_info = {
                     'name': inv['name'],
                     'start_month': month,
                     'duration': inv['duration'],
-                    'rate': inv['rate'] / 100,  # перевод в доли
+                    'rate': inv['rate'] / 100,
                     'risk': inv['risk'],
-                    'end_month': month + inv['duration']
-                })
+                    'return_month': return_month,
+                }
+                variables.append(var_info)
+                self.var_names.append(f"{inv['name']}{month}")
+
         return variables
 
     def build_model(self, investments: List[Dict], payments: Dict,
                     risk_limit: float, duration_limit: float, mode: str = 'full') -> Dict:
-        """
-        Построение математической модели задачи линейного программирования
+        """Построение математической модели"""
 
-        Args:
-            investments: список инвестиционных инструментов
-            payments: словарь платежей {месяц: сумма}
-            risk_limit: лимит по риску
-            duration_limit: лимит по сроку погашения
-            mode: режим расчета ('basic', 'risk', 'full')
-
-        Returns:
-            словарь с компонентами модели
-        """
         self.investments = investments
         self.payments = payments
         self.risk_limit = risk_limit
         self.duration_limit = duration_limit
 
-        # Генерация переменных
         self.variables = self._generate_variables(investments)
         n_vars = len(self.variables)
 
-        # Целевая функция (минимизация суммы всех инвестиций)
-        c = np.ones(n_vars)
+        print("\n" + "=" * 80)
+        print("СГЕНЕРИРОВАННЫЕ ПЕРЕМЕННЫЕ")
+        print("=" * 80)
+        for i, var in enumerate(self.variables):
+            print(f"  {self.var_names[i]:4}: старт={var['start_month']}, "
+                  f"возврат в начале мес.{var['return_month']}, "
+                  f"ставка={var['rate'] * 100:.1f}%, риск={var['risk']}")
 
-        # Инициализация матриц ограничений
-        A_eq = []
-        b_eq = []
+        # Целевая функция: минимизация суммы ВСЕХ инвестиций (а не только месяца 1)
+        c = np.ones(n_vars)  # Все инвестиции имеют вес 1
+
+        print(f"\nЦелевая функция: минимизировать сумму всех инвестиций")
+
         A_ub = []
         b_ub = []
 
-        # 1. Ограничения по платежам (равенства)
-        for month in sorted(payments.keys()):
-            row = np.zeros(n_vars)
-            for i, var in enumerate(self.variables):
-                if var['end_month'] == month:
-                    # Коэффициент с учетом процентов (отрицательный для канонической формы)
-                    row[i] = -(1 + var['rate'])
-            A_eq.append(row)
-            b_eq.append(-payments[month])
+        # 1. ПЛАТЕЖ В МЕСЯЦЕ 2
+        row_payment2 = np.zeros(n_vars)
+        for i, var in enumerate(self.variables):
+            if var['return_month'] == 2:
+                row_payment2[i] = (1 + var['rate'])
 
-        # 2. Ограничения по риску (если требуется)
+        A_ub.append(-row_payment2)
+        b_ub.append(-payments[2])
+        print(f"\nПлатеж месяц 2: инвестиции с return_month=2 ≥ {payments[2]:,} тыс. руб")
+
+        # 2. ПЛАТЕЖ В МЕСЯЦЕ 6
+        row_payment6 = np.zeros(n_vars)
+        for i, var in enumerate(self.variables):
+            if var['return_month'] == 6:
+                row_payment6[i] = (1 + var['rate'])
+
+        A_ub.append(-row_payment6)
+        b_ub.append(-payments[6])
+        print(f"Платеж месяц 6: инвестиции с return_month=6 ≥ {payments[6]:,} тыс. руб")
+
+        # 3. БАЛАНСОВЫЕ ОГРАНИЧЕНИЯ - УБИРАЕМ ПОЛНОСТЬЮ!
+        # Деньги могут просто лежать, не обязательно их реинвестировать
+
+        # 4. ОГРАНИЧЕНИЯ ПО РИСКУ
         if mode in ['risk', 'full']:
-            for month in range(1, 7):
-                for i, var in enumerate(self.variables):
-                    if var['start_month'] <= month < var['end_month']:
-                        row = np.zeros(n_vars)
-                        row[i] = var['risk'] - risk_limit
-                        A_ub.append(row)
-                        b_ub.append(0)
+            print("\n" + "=" * 80)
+            print("ОГРАНИЧЕНИЯ ПО РИСКУ")
+            print("=" * 80)
 
-        # 3. Ограничения по сроку погашения (если требуется)
+            for month in range(1, 7):
+                row = np.zeros(n_vars)
+                active_vars = []
+
+                for i, var in enumerate(self.variables):
+                    if var['start_month'] <= month < var['return_month']:
+                        active_vars.append((i, var))
+
+                if active_vars:
+                    constraint_parts = []
+                    for i, var in active_vars:
+                        coef = var['risk'] - risk_limit
+                        row[i] = coef
+                        constraint_parts.append(f"{coef:+.1f}·{self.var_names[i]}")
+
+                    A_ub.append(row)
+                    b_ub.append(0)
+                    print(f"Месяц {month}: {' '.join(constraint_parts)} ≤ 0")
+
+        # 5. ОГРАНИЧЕНИЯ ПО СРОКУ ПОГАШЕНИЯ
         if mode == 'full':
-            for month in range(1, 7):
-                for i, var in enumerate(self.variables):
-                    if var['start_month'] <= month < var['end_month']:
-                        row = np.zeros(n_vars)
-                        remaining_time = var['end_month'] - month
-                        row[i] = remaining_time - duration_limit
-                        A_ub.append(row)
-                        b_ub.append(0)
+            print("\n" + "=" * 80)
+            print("ОГРАНИЧЕНИЯ ПО СРОКУ ПОГАШЕНИЯ")
+            print("=" * 80)
 
-        # Границы переменных (x >= 0)
+            for month in range(1, 7):
+                row = np.zeros(n_vars)
+                active_vars = []
+
+                for i, var in enumerate(self.variables):
+                    if var['start_month'] <= month < var['return_month']:
+                        active_vars.append((i, var))
+
+                if active_vars:
+                    constraint_parts = []
+                    for i, var in active_vars:
+                        remaining = var['return_month'] - month
+                        coef = remaining - duration_limit
+                        row[i] = coef
+                        constraint_parts.append(f"{coef:+.1f}·{self.var_names[i]}")
+
+                    A_ub.append(row)
+                    b_ub.append(0)
+                    print(f"Месяц {month}: {' '.join(constraint_parts)} ≤ 0")
+
         bounds = [(0, None) for _ in range(n_vars)]
 
-        # Преобразование в массивы numpy
+        print(f"\nВсего ограничений: {len(A_ub)}")
+
         model = {
             'c': c,
-            'A_eq': np.array(A_eq) if A_eq else None,
-            'b_eq': np.array(b_eq) if b_eq else None,
             'A_ub': np.array(A_ub) if A_ub else None,
             'b_ub': np.array(b_ub) if b_ub else None,
             'bounds': bounds,
             'variables': self.variables,
+            'var_names': self.var_names,
             'n_vars': n_vars,
             'mode': mode
         }
@@ -128,189 +161,315 @@ class InvestmentOptimizer:
         return model
 
     def solve(self, model: Dict) -> Dict:
-        """
-        Решение задачи линейного программирования
-
-        Args:
-            model: словарь с компонентами модели
-
-        Returns:
-            словарь с результатами решения
-        """
+        """Решение задачи"""
         try:
-            # Подготовка параметров для linprog
+            print("\n" + "=" * 80)
+            print("РЕШЕНИЕ ЗАДАЧИ")
+            print("=" * 80)
+
+            print(f"model.keys() = {model.keys()}")
+            print(f"model['c'] = {model['c']}")
+            print(f"model['c'].shape = {model['c'].shape}")
+
+            if model['A_ub'] is not None:
+                print(f"model['A_ub'].shape = {model['A_ub'].shape}")
+                print(f"model['b_ub'].shape = {model['b_ub'].shape}")
+
             kwargs = {
                 'c': model['c'],
                 'bounds': model['bounds'],
                 'method': 'highs'
             }
 
-            # Добавление ограничений, если они есть
-            if model['A_eq'] is not None and model['b_eq'] is not None:
-                kwargs['A_eq'] = model['A_eq']
-                kwargs['b_eq'] = model['b_eq']
-
             if model['A_ub'] is not None and model['b_ub'] is not None:
                 kwargs['A_ub'] = model['A_ub']
                 kwargs['b_ub'] = model['b_ub']
+                print(f"Количество ограничений: {len(model['A_ub'])}")
 
-            # Решение
+            print("Вызов linprog...")
+            sys.stdout.flush()
+
             result = linprog(**kwargs)
 
-            # Формирование результата
+            print(f"linprog выполнен")
+            print(f"result.success = {result.success}")
+            print(f"result.message = {result.message}")
+            sys.stdout.flush()
+
             solution = {
                 'success': result.success,
                 'message': result.message,
                 'fun': result.fun if result.success else None,
                 'x': result.x if result.success else None,
                 'variables': model['variables'],
+                'var_names': model['var_names'],
                 'mode': model['mode'],
                 'risk_limit': self.risk_limit,
                 'duration_limit': self.duration_limit
             }
 
-            # Если решение успешно, рассчитываем дополнительные показатели
             if result.success:
-                solution.update(self._calculate_metrics(result.x, model['variables']))
+                print("Решение успешно, рассчитываем метрики...")
+                print(f"result.x = {result.x}")
+                sys.stdout.flush()
+
+                # РАСЧЕТ МЕТРИК - включаем обратно!
+                metrics = self._calculate_metrics(result.x, model['variables'])
+                solution.update(metrics)
+
+                # Также добавим простую аллокацию для надежности
+                if 'allocation' not in solution or not solution['allocation']:
+                    solution['allocation'] = {}
+                    solution['total_income'] = 0
+                    for i, val in enumerate(result.x):
+                        if val > 1e-3:
+                            var = model['variables'][i]
+                            key = f"{var['name']}{var['start_month']}"
+                            solution['allocation'][key] = {
+                                'instrument': var['name'],
+                                'start_month': var['start_month'],
+                                'amount': val,
+                                'income': val * var['rate'],
+                                'risk': var['risk']
+                            }
+                            solution['total_income'] += val * var['rate']
+
+            print("Возвращаем решение")
+            sys.stdout.flush()
 
             return solution
 
         except Exception as e:
+            print(f"❌ ОШИБКА В SOLVE: {e}")
+            traceback.print_exc()
+            sys.stdout.flush()
             return {
                 'success': False,
-                'message': f"Ошибка при решении: {str(e)}",
+                'message': f"Ошибка: {str(e)}",
                 'fun': None,
                 'x': None,
-                'variables': model['variables'],
-                'mode': model['mode']
+                'variables': model['variables'] if model else [],
+                'var_names': model['var_names'] if model else [],
+                'mode': model['mode'] if model else 'unknown'
             }
 
+    def get_allocation_dataframe(self, solution: Dict) -> pd.DataFrame:
+        """Таблица распределения"""
+        try:
+            if not solution or not solution.get('success'):
+                return pd.DataFrame()
+
+            data = []
+            allocation = solution.get('allocation', {})
+            for key, alloc in allocation.items():
+                data.append({
+                    'Инструмент': alloc['instrument'],
+                    'Месяц начала': alloc['start_month'],
+                    'Сумма (тыс. руб)': f"{alloc['amount']:,.0f}",
+                    'Сумма (млн руб)': f"{alloc['amount']/1000:,.2f}",
+                    'Доход (тыс. руб)': f"{alloc['income']:,.0f}",
+                    'Доход (млн руб)': f"{alloc['income']/1000:,.2f}",
+                    'Риск': alloc['risk']
+                })
+
+            return pd.DataFrame(data)
+        except Exception as e:
+            print(f"Ошибка в get_allocation_dataframe: {e}")
+            return pd.DataFrame()
+
+    def check_constraints(self, solution: Dict) -> pd.DataFrame:
+        """Проверка ограничений"""
+        try:
+            if not solution or not solution.get('success'):
+                return pd.DataFrame()
+
+            months = list(range(1, 7))
+            data = []
+
+            monthly_risk = solution.get('monthly_risk', [0]*6)
+            monthly_duration = solution.get('monthly_duration', [0]*6)
+            monthly_amount = solution.get('monthly_amount', [0]*6)
+
+            for i, month in enumerate(months):
+                risk_value = monthly_risk[i] if i < len(monthly_risk) else 0
+                duration_value = monthly_duration[i] if i < len(monthly_duration) else 0
+                amount = monthly_amount[i] / 1000 if i < len(monthly_amount) else 0
+
+                risk_status = 'OK' if risk_value <= solution.get('risk_limit', 6) + 1e-6 else 'НАРУШЕНИЕ'
+                duration_status = 'OK' if duration_value <= solution.get('duration_limit', 2.5) + 1e-6 else 'НАРУШЕНИЕ'
+
+                data.append({
+                    'Месяц': month,
+                    'Риск факт': round(risk_value, 2),
+                    'Риск лимит': solution.get('risk_limit', 6),
+                    'Риск статус': risk_status,
+                    'Срок факт': round(duration_value, 2),
+                    'Срок лимит': solution.get('duration_limit', 2.5),
+                    'Срок статус': duration_status,
+                    'Активы (млн руб)': round(amount, 2)
+                })
+
+            return pd.DataFrame(data)
+        except Exception as e:
+            print(f"Ошибка в check_constraints: {e}")
+            return pd.DataFrame()
+
     def _calculate_metrics(self, x: np.ndarray, variables: List[Dict]) -> Dict:
-        """
-        Расчет дополнительных показателей по месяцам
-
-        Args:
-            x: оптимальные значения переменных
-            variables: список переменных
-
-        Returns:
-            словарь с показателями
-        """
+        """Расчет метрик по месяцам"""
         monthly_risk = []
         monthly_duration = []
         monthly_amount = []
 
+        print("\n" + "=" * 80)
+        print("РАСЧЕТ МЕТРИК ПО МЕСЯЦАМ")
+        print("=" * 80)
+
         for month in range(1, 7):
-            # Находим активные инвестиции в текущем месяце
-            active_indices = []
             active_amounts = []
             active_risks = []
             active_durations = []
+            active_names = []
 
             for i, var in enumerate(variables):
-                if var['start_month'] <= month < var['end_month'] and x[i] > 1e-6:
-                    active_indices.append(i)
+                if var['start_month'] <= month < var['return_month'] and x[i] > 1e-3:
                     active_amounts.append(x[i])
                     active_risks.append(var['risk'])
-                    active_durations.append(var['end_month'] - month)
+                    active_durations.append(var['return_month'] - month)
+                    active_names.append(f"{var['name']}{var['start_month']}")
 
-            total_amount = sum(active_amounts)
-            monthly_amount.append(total_amount)
+            total = sum(active_amounts)
+            monthly_amount.append(total)
 
-            if total_amount > 1e-6:
-                # Средневзвешенный риск
-                weighted_risk = sum(a * r for a, r in zip(active_amounts, active_risks)) / total_amount
+            if total > 1e-3:
+                weighted_risk = sum(a * r for a, r in zip(active_amounts, active_risks)) / total
                 monthly_risk.append(weighted_risk)
-
-                # Средневзвешенный срок
-                weighted_duration = sum(a * d for a, d in zip(active_amounts, active_durations)) / total_amount
+                weighted_duration = sum(a * d for a, d in zip(active_amounts, active_durations)) / total
                 monthly_duration.append(weighted_duration)
+
+                print(f"Месяц {month}: активны {', '.join(active_names)}")
+                print(f"  сумма = {total / 1000:.2f} млн руб")
+                print(f"  риск = {weighted_risk:.2f}")
+                print(f"  срок = {weighted_duration:.2f}")
             else:
                 monthly_risk.append(0)
                 monthly_duration.append(0)
-
-        # Расчет распределения по инструментам
-        allocation = {}
-        for i, var in enumerate(variables):
-            if x[i] > 1e-6:
-                key = f"{var['name']}_{var['start_month']}"
-                allocation[key] = {
-                    'instrument': var['name'],
-                    'start_month': var['start_month'],
-                    'amount': x[i],
-                    'income': x[i] * var['rate'],
-                    'risk': var['risk']
-                }
+                print(f"Месяц {month}: нет активных инвестиций")
 
         return {
             'monthly_risk': monthly_risk,
             'monthly_duration': monthly_duration,
-            'monthly_amount': monthly_amount,
-            'allocation': allocation,
-            'total_income': sum(v['income'] for v in allocation.values())
+            'monthly_amount': monthly_amount
         }
 
-    def check_constraints(self, solution: Dict) -> pd.DataFrame:
-        """
-        Проверка соблюдения ограничений
+    def solve_basic(self, model_template: Dict) -> Dict:
+        """Найти оптимальное решение для basic режима"""
 
-        Args:
-            solution: словарь с результатами решения
+        import copy
+        solutions = []
 
-        Returns:
-            DataFrame с отчетом о соблюдении ограничений
-        """
-        if not solution['success']:
-            return pd.DataFrame()
+        print("\n" + "=" * 80)
+        print("ПОИСК ОПТИМАЛЬНОГО ПУТИ ДЛЯ BASIC РЕЖИМА")
+        print("=" * 80)
 
-        months = list(range(1, 7))
-        data = []
+        # Для каждого пути создаем свою целевую функцию
 
-        for i, month in enumerate(months):
-            risk_value = solution['monthly_risk'][i]
-            duration_value = solution['monthly_duration'][i]
+        # ПУТЬ 1: Только A (A1 + A5)
+        print("\n🔍 Пробуем путь A1 → A5...")
+        model1 = copy.deepcopy(model_template)
 
-            risk_status = 'OK' if risk_value <= solution['risk_limit'] else 'Нарушение'
-            duration_status = 'OK' if duration_value <= solution['duration_limit'] else 'Нарушение'
+        # МЕНЯЕМ целевую функцию: минимизируем только начальные инвестиции
+        c1 = np.zeros(len(model1['variables']))
+        for i, var in enumerate(model1['variables']):
+            if var['start_month'] == 1:  # только инвестиции в месяц 1
+                c1[i] = 1.0
+        model1['c'] = c1
 
-            data.append({
-                'Месяц': month,
-                'Риск факт': round(risk_value, 2),
-                'Риск лимит': solution['risk_limit'],
-                'Риск статус': risk_status,
-                'Срок факт': round(duration_value, 2),
-                'Срок лимит': solution['duration_limit'],
-                'Срок статус': duration_status,
-                'Сумма активов': round(solution['monthly_amount'][i], 2)
-            })
+        # Запрещаем B, C, O
+        for i, var in enumerate(model1['variables']):
+            if var['name'] in ['B', 'C', 'O']:
+                model1['bounds'][i] = (0, 0)
+            if var['name'] == 'A' and var['start_month'] not in [1, 5]:
+                model1['bounds'][i] = (0, 0)
 
-        return pd.DataFrame(data)
+        sol1 = self.solve(model1)
+        if sol1['success']:
+            # Считаем только начальные инвестиции
+            initial = sum(sol1['x'][i] for i, var in enumerate(model1['variables'])
+                          if var['start_month'] == 1 and sol1['x'][i] > 1e-3)
+            sol1['path'] = 'A1 → A5'
+            sol1['initial'] = initial
+            solutions.append(sol1)
+            print(f"  ✅ Найдено: {initial:,.2f} тыс. руб")
 
-    def get_allocation_dataframe(self, solution: Dict) -> pd.DataFrame:
-        """
-        Получение таблицы распределения инвестиций
+        # ПУТЬ 2: B путь (B1 → B3 → A5)
+        print("\n🔍 Пробуем путь B1 → B3 → A5...")
+        model2 = copy.deepcopy(model_template)
 
-        Args:
-            solution: словарь с результатами решения
+        # МЕНЯЕМ целевую функцию
+        c2 = np.zeros(len(model2['variables']))
+        for i, var in enumerate(model2['variables']):
+            if var['start_month'] == 1:
+                c2[i] = 1.0
+        model2['c'] = c2
 
-        Returns:
-            DataFrame с распределением
-        """
-        if not solution['success']:
-            return pd.DataFrame()
+        # Запрещаем лишнее
+        for i, var in enumerate(model2['variables']):
+            if var['name'] in ['C', 'O']:
+                model2['bounds'][i] = (0, 0)
+            if var['name'] == 'A' and var['start_month'] == 1:
+                model2['bounds'][i] = (0, 0)
+            if var['name'] == 'A' and var['start_month'] not in [5]:
+                model2['bounds'][i] = (0, 0)
+            if var['name'] == 'B' and var['start_month'] not in [1, 3]:
+                model2['bounds'][i] = (0, 0)
 
-        data = []
-        for key, alloc in solution['allocation'].items():
-            data.append({
-                'Инструмент': alloc['instrument'],
-                'Месяц начала': alloc['start_month'],
-                'Сумма (млн руб)': round(alloc['amount'], 2),
-                'Доход (млн руб)': round(alloc['income'], 2),
-                'Риск': alloc['risk']
-            })
+        sol2 = self.solve(model2)
+        if sol2['success']:
+            initial = sum(sol2['x'][i] for i, var in enumerate(model2['variables'])
+                          if var['start_month'] == 1 and sol2['x'][i] > 1e-3)
+            sol2['path'] = 'B1 → B3 → A5'
+            sol2['initial'] = initial
+            solutions.append(sol2)
+            print(f"  ✅ Найдено: {initial:,.2f} тыс. руб")
 
-        df = pd.DataFrame(data)
-        if not df.empty:
-            df = df.sort_values(['Инструмент', 'Месяц начала'])
+        # ПУТЬ 3: C путь (C1 → A4 → A5)
+        print("\n🔍 Пробуем путь C1 → A4 → A5...")
+        model3 = copy.deepcopy(model_template)
 
-        return df
+        # МЕНЯЕМ целевую функцию
+        c3 = np.zeros(len(model3['variables']))
+        for i, var in enumerate(model3['variables']):
+            if var['start_month'] == 1:
+                c3[i] = 1.0
+        model3['c'] = c3
+
+        # Запрещаем лишнее
+        for i, var in enumerate(model3['variables']):
+            if var['name'] in ['B', 'O']:
+                model3['bounds'][i] = (0, 0)
+            if var['name'] == 'A' and var['start_month'] == 1:
+                model3['bounds'][i] = (0, 0)
+            if var['name'] == 'A' and var['start_month'] not in [4, 5]:
+                model3['bounds'][i] = (0, 0)
+            if var['name'] == 'C' and var['start_month'] != 1:
+                model3['bounds'][i] = (0, 0)
+
+        sol3 = self.solve(model3)
+        if sol3['success']:
+            initial = sum(sol3['x'][i] for i, var in enumerate(model3['variables'])
+                          if var['start_month'] == 1 and sol3['x'][i] > 1e-3)
+            sol3['path'] = 'C1 → A4 → A5'
+            sol3['initial'] = initial
+            solutions.append(sol3)
+            print(f"  ✅ Найдено: {initial:,.2f} тыс. руб")
+
+        # Выбираем лучшее
+        if solutions:
+            best = min(solutions, key=lambda s: s['initial'])
+            print("\n" + "=" * 80)
+            print(f"✅ ВЫБРАН ОПТИМАЛЬНЫЙ ПУТЬ: {best['path']}")
+            print(f"   Начальные инвестиции: {best['initial']:,.2f} тыс. руб")
+            print("=" * 80)
+            return best
+
+        return {'success': False, 'message': 'Нет решений'}

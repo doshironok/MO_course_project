@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 import pandas as pd
+import traceback
 
 
 class AnalysisTab(QWidget):
@@ -23,9 +24,17 @@ class AnalysisTab(QWidget):
     def init_ui(self):
         """Инициализация интерфейса вкладки"""
         layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # Заголовок
+        title_label = QLabel("Детальный анализ")
+        title_label.setProperty("role", "heading")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_label)
 
         # Группа информации о решении
-        info_group = QGroupBox("Информация о решении")
+        info_group = QGroupBox("ℹ️ Информация о решении")
         info_layout = QGridLayout()
 
         info_layout.addWidget(QLabel("Статус:"), 0, 0)
@@ -38,20 +47,21 @@ class AnalysisTab(QWidget):
 
         info_layout.addWidget(QLabel("Сообщение:"), 2, 0)
         self.message_label = QLabel("—")
+        self.message_label.setWordWrap(True)
         info_layout.addWidget(self.message_label, 2, 1)
 
         info_group.setLayout(info_layout)
         layout.addWidget(info_group)
 
-        # Группа детального анализа ограничений
-        constraints_group = QGroupBox("Детальный анализ ограничений")
+        # Группа анализа ограничений
+        constraints_group = QGroupBox("📋 Анализ ограничений")
         constraints_layout = QVBoxLayout()
 
         self.constraints_table = QTableWidget()
         self.constraints_table.setColumnCount(8)
         self.constraints_table.setHorizontalHeaderLabels(
             ["Месяц", "Риск факт", "Риск лимит", "Статус",
-             "Срок факт", "Срок лимит", "Статус", "Активы"]
+             "Срок факт", "Срок лимит", "Статус", "Активы (млн руб)"]
         )
         self.constraints_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         constraints_layout.addWidget(self.constraints_table)
@@ -59,8 +69,8 @@ class AnalysisTab(QWidget):
         constraints_group.setLayout(constraints_layout)
         layout.addWidget(constraints_group)
 
-        # Группа выводов и рекомендаций
-        conclusions_group = QGroupBox("Выводы и рекомендации")
+        # Группа выводов
+        conclusions_group = QGroupBox("💡 Выводы")
         conclusions_layout = QVBoxLayout()
 
         self.conclusions_text = QTextEdit()
@@ -74,117 +84,128 @@ class AnalysisTab(QWidget):
         self.setLayout(layout)
 
     def set_data(self, solution: dict, constraints_df: pd.DataFrame, allocation_df: pd.DataFrame):
-        """
-        Установка данных для анализа
-
-        Args:
-            solution: словарь с решением
-            constraints_df: таблица ограничений
-            allocation_df: таблица распределения
-        """
-        self.current_solution = solution
-        self.constraints_df = constraints_df
-        self.allocation_df = allocation_df
-
-        self.update_display()
+        """Установка данных для анализа"""
+        try:
+            print("\n=== ANALYSIS TAB SET DATA ===")
+            self.current_solution = solution
+            self.constraints_df = constraints_df
+            self.allocation_df = allocation_df
+            self.update_display()
+            print("=== ANALYSIS TAB SET DATA FINISHED ===\n")
+        except Exception as e:
+            print(f"❌ ОШИБКА В SET_DATA: {e}")
+            traceback.print_exc()
 
     def update_display(self):
         """Обновление отображения"""
-        if not self.current_solution:
-            return
+        try:
+            if not self.current_solution:
+                print("Нет решения для отображения")
+                return
 
-        # Информация о решении
-        mode_names = {'basic': 'Без ограничений', 'risk': 'С учетом риска', 'full': 'Полный'}
+            print("Обновление дисплея анализа...")
 
-        self.status_label.setText("Успешно" if self.current_solution.get('success') else "Ошибка")
-        self.mode_label.setText(mode_names.get(self.current_solution.get('mode', ''), '—'))
-        self.message_label.setText(self.current_solution.get('message', '—'))
+            # Статус
+            success = self.current_solution.get('success', False)
+            self.status_label.setText("✅ Успешно" if success else "❌ Ошибка")
 
-        # Таблица ограничений
-        if self.constraints_df is not None and not self.constraints_df.empty:
-            self.constraints_table.setRowCount(len(self.constraints_df))
+            # Режим
+            mode_names = {'basic': 'Без ограничений', 'risk': 'С риском', 'full': 'Полный'}
+            mode = self.current_solution.get('mode', '')
+            self.mode_label.setText(mode_names.get(mode, mode))
 
-            for i, row in self.constraints_df.iterrows():
-                self.constraints_table.setItem(i, 0, QTableWidgetItem(str(int(row['Месяц']))))
-                self.constraints_table.setItem(i, 1, QTableWidgetItem(str(row['Риск факт'])))
-                self.constraints_table.setItem(i, 2, QTableWidgetItem(str(row['Риск лимит'])))
+            # Сообщение
+            self.message_label.setText(self.current_solution.get('message', '—'))
 
-                status_risk = QTableWidgetItem(str(row['Риск статус']))
-                if row['Риск статус'] == 'Нарушение':
-                    status_risk.setForeground(QBrush(Qt.GlobalColor.red))
-                self.constraints_table.setItem(i, 3, status_risk)
+            # Таблица ограничений
+            if self.constraints_df is not None and not self.constraints_df.empty:
+                self.constraints_table.setRowCount(len(self.constraints_df))
+                for i in range(len(self.constraints_df)):
+                    row = self.constraints_df.iloc[i]
 
-                self.constraints_table.setItem(i, 4, QTableWidgetItem(str(row['Срок факт'])))
-                self.constraints_table.setItem(i, 5, QTableWidgetItem(str(row['Срок лимит'])))
+                    # Месяц
+                    self.constraints_table.setItem(i, 0, QTableWidgetItem(str(int(row.get('Месяц', 0)))))
 
-                status_dur = QTableWidgetItem(str(row['Срок статус']))
-                if row['Срок статус'] == 'Нарушение':
-                    status_dur.setForeground(QBrush(Qt.GlobalColor.red))
-                self.constraints_table.setItem(i, 6, status_dur)
+                    # Риск факт
+                    self.constraints_table.setItem(i, 1, QTableWidgetItem(f"{row.get('Риск факт', 0):.2f}"))
 
-                self.constraints_table.setItem(i, 7, QTableWidgetItem(str(row['Сумма активов'])))
-        else:
-            self.constraints_table.setRowCount(1)
-            self.constraints_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
+                    # Риск лимит
+                    self.constraints_table.setItem(i, 2, QTableWidgetItem(f"{row.get('Риск лимит', 6):.1f}"))
 
-        # Выводы и рекомендации
-        self._generate_conclusions()
+                    # Риск статус
+                    status_item = QTableWidgetItem(str(row.get('Риск статус', '')))
+                    if row.get('Риск статус') == 'НАРУШЕНИЕ':
+                        status_item.setForeground(QBrush(Qt.GlobalColor.red))
+                    self.constraints_table.setItem(i, 3, status_item)
+
+                    # Срок факт
+                    self.constraints_table.setItem(i, 4, QTableWidgetItem(f"{row.get('Срок факт', 0):.2f}"))
+
+                    # Срок лимит
+                    self.constraints_table.setItem(i, 5, QTableWidgetItem(f"{row.get('Срок лимит', 2.5):.1f}"))
+
+                    # Срок статус
+                    status_item = QTableWidgetItem(str(row.get('Срок статус', '')))
+                    if row.get('Срок статус') == 'НАРУШЕНИЕ':
+                        status_item.setForeground(QBrush(Qt.GlobalColor.red))
+                    self.constraints_table.setItem(i, 6, status_item)
+
+                    # Активы
+                    self.constraints_table.setItem(i, 7, QTableWidgetItem(f"{row.get('Активы (млн руб)', 0):.2f}"))
+            else:
+                self.constraints_table.setRowCount(1)
+                self.constraints_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
+
+            # Выводы
+            self._generate_conclusions()
+
+        except Exception as e:
+            print(f"❌ ОШИБКА В UPDATE_DISPLAY: {e}")
+            traceback.print_exc()
 
     def _generate_conclusions(self):
-        """Формирование выводов и рекомендаций"""
-        if not self.current_solution or not self.current_solution.get('success'):
-            self.conclusions_text.setText("Нет данных для формирования выводов")
-            return
+        """Формирование выводов"""
+        try:
+            if not self.current_solution or not self.current_solution.get('success'):
+                self.conclusions_text.setText("❌ Нет данных для формирования выводов")
+                return
 
-        text = "### Анализ результатов оптимизации ###\n\n"
+            text = "📊 АНАЛИЗ РЕЗУЛЬТАТОВ\n"
+            text += "=" * 50 + "\n\n"
 
-        # Основной вывод
-        text += f"Начальный фонд: {round(self.current_solution['fun'], 2)} млн руб\n"
-        text += f"Общая доходность: {round(self.current_solution.get('total_income', 0), 2)} млн руб\n\n"
+            # Начальный фонд
+            initial_fund = self.current_solution.get('fun', 0)
+            if initial_fund is None:
+                initial_fund = 0
 
-        # Анализ ограничений
-        if self.constraints_df is not None and not self.constraints_df.empty:
-            violations_risk = self.constraints_df[self.constraints_df['Риск статус'] == 'Нарушение']
-            violations_dur = self.constraints_df[self.constraints_df['Срок статус'] == 'Нарушение']
+            # Считаем только инвестиции в месяце 1
+            x = self.current_solution.get('x', [])
+            variables = self.current_solution.get('variables', [])
 
-            text += "Соблюдение ограничений:\n"
-            text += f"- Нарушений по риску: {len(violations_risk)}\n"
-            text += f"- Нарушений по сроку: {len(violations_dur)}\n\n"
+            initial_sum = 0
+            if x is not None and len(x) > 0:
+                for i, val in enumerate(x):
+                    if i < len(variables) and val > 1e-3 and variables[i]['start_month'] == 1:
+                        initial_sum += val
 
-            if len(violations_risk) > 0:
-                text += f"Месяцы с нарушением риска: {list(violations_risk['Месяц'].values)}\n"
-            if len(violations_dur) > 0:
-                text += f"Месяцы с нарушением срока: {list(violations_dur['Месяц'].values)}\n\n"
+            text += f"💰 Начальные инвестиции: {initial_sum/1000:.2f} млн руб\n"
 
-        # Анализ инвестиций
-        if self.allocation_df is not None and not self.allocation_df.empty:
-            max_investment = self.allocation_df.loc[self.allocation_df['Сумма (млн руб)'].idxmax()]
-            text += f"Максимальная инвестиция: {max_investment['Инструмент']} "
-            text += f"(месяц {max_investment['Месяц начала']}, "
-            text += f"{max_investment['Сумма (млн руб)']} млн руб)\n"
+            # Доходность
+            total_income = self.current_solution.get('total_income', 0)
+            if total_income is None:
+                total_income = 0
+            text += f"📈 Общая доходность: {total_income/1000:.2f} млн руб\n\n"
 
-            by_instrument = self.allocation_df.groupby('Инструмент')['Сумма (млн руб)'].sum()
-            text += "Распределение по инструментам:\n"
-            for instr, amount in by_instrument.items():
-                text += f"  {instr}: {round(amount, 2)} млн руб ({round(amount / self.current_solution['fun'] * 100, 1)}%)\n"
+            # Анализ инвестиций
+            allocation = self.current_solution.get('allocation', {})
+            if allocation:
+                text += "📊 Распределение:\n"
+                for key, alloc in allocation.items():
+                    text += f"  • {key}: {alloc['amount']/1000:.2f} млн руб (доход {alloc['income']/1000:.2f} млн руб)\n"
 
-        # Ответы на вопросы задания
-        text += "\n=== Ответы на вопросы задания ===\n"
-        text += f"1. Размер целевого фонда без ограничений: "
-        text += f"{round(self.current_solution['fun'], 2) if self.current_solution['mode'] == 'basic' else '—'} млн руб\n"
+            self.conclusions_text.setText(text)
 
-        # Проверка необходимости инвестиций А в месяце 1
-        if self.allocation_df is not None and not self.allocation_df.empty:
-            a_month1 = self.allocation_df[
-                (self.allocation_df['Инструмент'] == 'A') &
-                (self.allocation_df['Месяц начала'] == 1)
-                ]
-            text += f"2. Инвестиции вида А в месяце 1: {'необходимы' if len(a_month1) > 0 else 'не требуются'}\n"
-
-        text += f"3. Размер фонда с учетом риска: "
-        text += f"{round(self.current_solution['fun'], 2) if self.current_solution['mode'] == 'risk' else '—'} млн руб\n"
-
-        text += f"4. Размер фонда с учетом всех ограничений: "
-        text += f"{round(self.current_solution['fun'], 2) if self.current_solution['mode'] == 'full' else '—'} млн руб\n"
-
-        self.conclusions_text.setText(text)
+        except Exception as e:
+            print(f"❌ ОШИБКА В GENERATE_CONCLUSIONS: {e}")
+            traceback.print_exc()
+            self.conclusions_text.setText(f"Ошибка: {str(e)}")
