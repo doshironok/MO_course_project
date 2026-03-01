@@ -390,10 +390,13 @@ class InvestmentOptimizer:
         print("ПОИСК ОПТИМАЛЬНОГО ПУТИ ДЛЯ BASIC РЕЖИМА")
         print("=" * 80)
 
-        # ПУТЬ A: A1 + A5
-        a1 = 200000 / 1.015  # 197044
-        a5 = 700000 / 1.015  # 689655
-        s_a = a1 + a5
+        PAYMENT = 200000  # выплата в конце 2 месяца
+        TARGET = 700000  # оставшаяся сумма к концу 6 месяца
+
+        # ПУТЬ A: A1 (для выплаты) + A5 (для накопления)
+        a1 = PAYMENT / 1.015  # 197044.3
+        a5 = TARGET / 1.015  # 689655.2
+        fund_a = a1 + a5  # 886699.5
 
         x_a = np.zeros(len(model_template['variables']))
         for i, var in enumerate(model_template['variables']):
@@ -402,11 +405,16 @@ class InvestmentOptimizer:
             if var['name'] == 'A' and var['start_month'] == 5:
                 x_a[i] = a5
 
+        payment_a = a1 * 1.015  # должно быть 200,000
+        final_a = a5 * 1.015  # должно быть 700,000
+
         sol_a = {
             'success': True,
-            'path': 'A1 → A5',
-            'fun': s_a,
+            'path': 'A1(выплата) + A5(накопление)',
+            'fun': fund_a,
             'x': x_a,
+            'payment_amount': payment_a,
+            'final_amount': final_a,
             'variables': model_template['variables'],
             'var_names': model_template['var_names'],
             'mode': 'basic',
@@ -416,27 +424,40 @@ class InvestmentOptimizer:
         metrics_a = self._calculate_metrics(x_a, model_template['variables'])
         sol_a.update(metrics_a)
         solutions.append(sol_a)
-        print(f"  🔍 A путь: {s_a:,.2f} тыс. руб")
+        print(f"  🔍 Путь A: {fund_a:,.2f} руб (A1={a1:,.2f}, A5={a5:,.2f})")
+        print(f"     Выплата м2: {payment_a:,.2f}, Остаток м6: {final_a:,.2f}")
 
-        # ПУТЬ B: B1 → B3 → A5
-        b1 = 700000 / (1.035 * 1.035 * 1.015)  # 643800
-        b3 = b1 * 1.035
-        a5_b = b3 * 1.035
+        # ПУТЬ B: B1 → (выплата) → B3 → A5
+        # Уравнение: (X * 1.035 - 200000) * 1.035 * 1.015 = 700000
+        x_b1 = (700000 / (1.035 * 1.015) + 200000) / 1.035
+        # x_b1 = (700000 / 1.050525 + 200000) / 1.035
+        # x_b1 = (666340.0 + 200000) / 1.035
+        # x_b1 = 866340.0 / 1.035
+        # x_b1 = 837043.0
+
+        after_payment = x_b1 * 1.035 - PAYMENT  # остаток после выплаты
+        x_b3 = after_payment
+        x_a5_b = x_b3 * 1.035
 
         x_b = np.zeros(len(model_template['variables']))
         for i, var in enumerate(model_template['variables']):
             if var['name'] == 'B' and var['start_month'] == 1:
-                x_b[i] = b1
+                x_b[i] = x_b1
             if var['name'] == 'B' and var['start_month'] == 3:
-                x_b[i] = b3
+                x_b[i] = x_b3
             if var['name'] == 'A' and var['start_month'] == 5:
-                x_b[i] = a5_b
+                x_b[i] = x_a5_b
+
+        payment_b = x_b1 * 1.035  # сумма до выплаты
+        final_b = x_b3 * 1.035 * 1.015
 
         sol_b = {
             'success': True,
-            'path': 'B1 → B3 → A5',
-            'fun': b1,
+            'path': 'B1 → выплата → B3 → A5',
+            'fun': x_b1,
             'x': x_b,
+            'payment_amount': payment_b,
+            'final_amount': final_b,
             'variables': model_template['variables'],
             'var_names': model_template['var_names'],
             'mode': 'basic',
@@ -446,27 +467,44 @@ class InvestmentOptimizer:
         metrics_b = self._calculate_metrics(x_b, model_template['variables'])
         sol_b.update(metrics_b)
         solutions.append(sol_b)
-        print(f"  🔍 B путь: {b1:,.2f} тыс. руб")
+        print(f"  🔍 Путь B: {x_b1:,.2f} руб")
+        print(f"     До выплаты: {payment_b:,.2f}, После выплаты: {after_payment:,.2f}")
+        print(f"     Конец м6: {final_b:,.2f}")
 
-        # ПУТЬ C: C1 → A4 → A5
-        c1 = 700000 / (1.06 * 1.015 * 1.015)  # 641003
-        a4 = c1 * 1.06
-        a5_c = a4 * 1.015
+        # ПУТЬ C: A1 (для выплаты) + C1 → A4 → A5 (для накопления)
+        a1_c = PAYMENT / 1.015  # 197044.3 для выплаты
+
+        # C1 для накопления 700,000 через цепочку C1→A4→A5
+        x_c1 = TARGET / (1.06 * 1.015 ** 2)  # 700,000 / (1.06 * 1.030225)
+        # x_c1 = 700000 / 1.0920385
+        # x_c1 = 641003.0
+
+        x_a4 = x_c1 * 1.06
+        x_a5_c = x_a4 * 1.015
 
         x_c = np.zeros(len(model_template['variables']))
         for i, var in enumerate(model_template['variables']):
+            if var['name'] == 'A' and var['start_month'] == 1:
+                x_c[i] = a1_c
             if var['name'] == 'C' and var['start_month'] == 1:
-                x_c[i] = c1
+                x_c[i] = x_c1
             if var['name'] == 'A' and var['start_month'] == 4:
-                x_c[i] = a4
+                x_c[i] = x_a4
             if var['name'] == 'A' and var['start_month'] == 5:
-                x_c[i] = a5_c
+                x_c[i] = x_a5_c
+
+        fund_c = a1_c + x_c1
+
+        payment_c = a1_c * 1.015  # должно быть 200,000
+        final_c = x_c1 * 1.06 * 1.015 ** 2  # должно быть 700,000
 
         sol_c = {
             'success': True,
-            'path': 'C1 → A4 → A5',
-            'fun': c1,
+            'path': 'A1(выплата) + C1→A4→A5(накопление)',
+            'fun': fund_c,
             'x': x_c,
+            'payment_amount': payment_c,
+            'final_amount': final_c,
             'variables': model_template['variables'],
             'var_names': model_template['var_names'],
             'mode': 'basic',
@@ -476,9 +514,52 @@ class InvestmentOptimizer:
         metrics_c = self._calculate_metrics(x_c, model_template['variables'])
         sol_c.update(metrics_c)
         solutions.append(sol_c)
-        print(f"  🔍 C путь: {c1:,.2f} тыс. руб")
+        print(f"  🔍 Путь C: {fund_c:,.2f} руб (A1={a1_c:,.2f}, C1={x_c1:,.2f})")
+        print(f"     Выплата м2: {payment_c:,.2f}, Конец м6: {final_c:,.2f}")
 
-        # Выбираем минимальный
+        # ПУТЬ D: B1 для выплаты + C1 для накопления
+        b1_payment = PAYMENT / 1.035  # сколько нужно вложить в B1 для получения 200,000
+        # b1_payment = 200000 / 1.035 = 193236.7
+
+        # C1 для накопления 700,000 (как выше)
+        c1_saving = TARGET / (1.06 * 1.015 ** 2)  # 641003.0
+
+        fund_d = b1_payment + c1_saving
+
+        x_d = np.zeros(len(model_template['variables']))
+        for i, var in enumerate(model_template['variables']):
+            if var['name'] == 'B' and var['start_month'] == 1:
+                x_d[i] = b1_payment
+            if var['name'] == 'C' and var['start_month'] == 1:
+                x_d[i] = c1_saving
+            if var['name'] == 'A' and var['start_month'] == 4:
+                x_d[i] = c1_saving * 1.06
+            if var['name'] == 'A' and var['start_month'] == 5:
+                x_d[i] = c1_saving * 1.06 * 1.015
+
+        payment_d = b1_payment * 1.035
+        final_d = c1_saving * 1.06 * 1.015 ** 2
+
+        sol_d = {
+            'success': True,
+            'path': 'B1(выплата) + C1→A4→A5(накопление)',
+            'fun': fund_d,
+            'x': x_d,
+            'payment_amount': payment_d,
+            'final_amount': final_d,
+            'variables': model_template['variables'],
+            'var_names': model_template['var_names'],
+            'mode': 'basic',
+            'risk_limit': 6.0,
+            'duration_limit': 2.5
+        }
+        metrics_d = self._calculate_metrics(x_d, model_template['variables'])
+        sol_d.update(metrics_d)
+        solutions.append(sol_d)
+        print(f"  🔍 Путь D: {fund_d:,.2f} руб (B1={b1_payment:,.2f}, C1={c1_saving:,.2f})")
+        print(f"     Выплата м2: {payment_d:,.2f}, Конец м6: {final_d:,.2f}")
+
+        # Выбираем минимальный начальный фонд
         best = min(solutions, key=lambda s: s['fun'])
 
         # Создаем allocation_df для лучшего решения
@@ -489,8 +570,8 @@ class InvestmentOptimizer:
                 allocation_data.append({
                     'Инструмент': var['name'],
                     'Месяц начала': var['start_month'],
-                    'Сумма (тыс. руб)': f"{val:,.0f}",
-                    'Доход (тыс. руб)': f"{val * var['rate']:,.0f}",
+                    'Сумма (тыс. руб)': f"{val / 1000:,.0f}",
+                    'Доход (тыс. руб)': f"{val * var['rate'] / 1000:,.0f}",
                     'Риск': var['risk']
                 })
         best['allocation_df'] = pd.DataFrame(allocation_data)
@@ -513,13 +594,17 @@ class InvestmentOptimizer:
                 'Срок факт': round(duration_value, 2),
                 'Срок лимит': 2.5,
                 'Срок статус': duration_status,
-                'Активы (тыс. руб)': round(amount, 2)
+                'Активы (тыс. руб)': round(amount / 1000, 2)
             })
         best['constraints_df'] = pd.DataFrame(constraints_data)
 
         print("\n" + "=" * 80)
         print(f"✅ ВЫБРАН: {best['path']}")
-        print(f"   Начальные инвестиции: {best['fun']:,.2f} тыс. руб")
+        print(f"   Начальные инвестиции: {best['fun']:,.2f} руб ({best['fun'] / 1000:,.2f} тыс. руб)")
+        if 'payment_amount' in best:
+            print(f"   Выплата в конце м2: {best['payment_amount']:,.2f} руб")
+        if 'final_amount' in best:
+            print(f"   Остаток в конце м6: {best['final_amount']:,.2f} руб")
         print("=" * 80)
 
         return best

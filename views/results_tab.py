@@ -105,6 +105,18 @@ class ResultsTab(QWidget):
 
         self.setLayout(layout)
 
+    def format_thousands(self, value):
+        """Форматирование числа с разделителями разрядов"""
+        try:
+            if value is None:
+                return "0"
+            # Преобразуем в число и округляем до целых
+            num_value = float(value)
+            # Не делим на 1000, только форматируем с пробелами
+            return f"{int(round(num_value)):,}".replace(",", " ")
+        except (ValueError, TypeError):
+            return str(value)
+
     def display_results(self, solution: dict, constraints_df: pd.DataFrame, allocation_df: pd.DataFrame):
         """Отображение результатов"""
         try:
@@ -121,37 +133,62 @@ class ResultsTab(QWidget):
                 self.allocation_table.setRowCount(0)
                 return
 
+            # Определяем режим расчета
+            mode = solution.get('mode', '')
+
             # ===== РАСЧЕТ НАЧАЛЬНОГО ФОНДА =====
-            if solution.get('mode') == 'basic' and 'path' in solution:
-                fund_value = solution['fun']
+            if mode == 'basic' and 'path' in solution:
+                # Для basic режима - значение в рублях, нужно преобразовать в тысячи
+                fund_value = solution.get('fun', 0)
+                if fund_value is None:
+                    fund_value = 0
+
+                # Делим на 1000 для отображения в тысячах рублей
+                fund_value_thousands = fund_value / 1000
+
                 path_info = f"✅ ВЫБРАН ПУТЬ: {solution['path']}\n"
                 if 'details' in solution:
                     path_info += "Детали:\n"
                     for k, v in solution['details'].items():
-                        path_info += f"  {k}: {v:.2f} тыс. руб\n"
+                        # Детали тоже в рублях, делим на 1000
+                        v_thousands = v / 1000
+                        path_info += f"  {k}: {self.format_thousands(v_thousands)} тыс. руб\n"
+
+                self.fund_label.setText(self.format_thousands(fund_value_thousands))
+                print(f"fund_value (basic) = {fund_value:.2f} руб = {self.format_thousands(fund_value_thousands)} тыс. руб")
+
             else:
+                # Для risk и full режимов - значения уже в тысячах рублей
                 x = solution.get('x', [])
                 fund_value = sum(x) if x is not None else 0
                 path_info = ""
 
                 if fund_value > 0:
-                    path_info = f"💰 Всего инвестиций: {fund_value:.2f} тыс. руб\n"
+                    # Не делим на 1000, так как уже в тысячах
+                    self.fund_label.setText(self.format_thousands(fund_value))
+
+                    path_info = f"💰 Всего инвестиций: {self.format_thousands(fund_value)} тыс. руб\n"
                     variables = solution.get('variables', [])
                     month1_sum = sum(x[i] for i, var in enumerate(variables)
                                      if var['start_month'] == 1 and x[i] > 1e-3)
                     if month1_sum > 0:
-                        path_info += f"   Из них в месяц 1: {month1_sum:.2f} тыс. руб\n"
+                        path_info += f"   Из них в месяц 1: {self.format_thousands(month1_sum)} тыс. руб\n"
 
-            # УБИРАЕМ округление до тысяч
-            self.fund_label.setText(f"{fund_value:.0f}".replace(',', ' '))
-            print(f"fund_value = {fund_value:.2f} тыс. руб")
+                    print(f"fund_value (risk/full) = {fund_value:.2f} тыс. руб")
 
             # ===== ОБЩАЯ ДОХОДНОСТЬ =====
             total_income = solution.get('total_income', 0)
             if total_income is None:
                 total_income = 0
-            # УБИРАЕМ округление до тысяч
-            self.income_label.setText(f"{total_income:.0f}".replace(',', ' '))
+
+            # Для basic режима total_income в рублях, для других - в тысячах
+            if mode == 'basic':
+                total_income_thousands = total_income / 1000
+                self.income_label.setText(self.format_thousands(total_income_thousands))
+                print(f"total_income (basic) = {total_income:.2f} руб = {self.format_thousands(total_income_thousands)} тыс. руб")
+            else:
+                self.income_label.setText(self.format_thousands(total_income))
+                print(f"total_income (risk/full) = {total_income:.2f} тыс. руб")
 
             # ===== КОЛИЧЕСТВО ИНВЕСТИЦИЙ =====
             allocation = solution.get('allocation', {})
@@ -161,7 +198,6 @@ class ResultsTab(QWidget):
 
             # ===== РЕЖИМ РАСЧЕТА =====
             mode_names = {'basic': 'Без ограничений', 'risk': 'С риском', 'full': 'Полный'}
-            mode = solution.get('mode', '')
             self.mode_label.setText(mode_names.get(mode, mode))
 
             # ===== ТАБЛИЦА РАСПРЕДЕЛЕНИЯ =====
@@ -173,15 +209,37 @@ class ResultsTab(QWidget):
                     self.allocation_table.setItem(i, 0, QTableWidgetItem(str(row.get('Инструмент', ''))))
                     self.allocation_table.setItem(i, 1, QTableWidgetItem(str(row.get('Месяц начала', ''))))
 
-                    # УБИРАЕМ форматирование с запятыми
+                    # Сумма
                     amount = row.get('Сумма (тыс. руб)', '0')
-                    if isinstance(amount, str):
-                        amount = amount.replace(',', '')
+                    if isinstance(amount, (int, float)):
+                        # Для basic режима данные могут быть в рублях
+                        if mode == 'basic':
+                            amount = amount / 1000
+                        amount = self.format_thousands(amount)
+                    elif isinstance(amount, str) and amount.replace('.', '').replace('-', '').isdigit():
+                        try:
+                            amount_num = float(amount)
+                            if mode == 'basic':
+                                amount_num = amount_num / 1000
+                            amount = self.format_thousands(amount_num)
+                        except ValueError:
+                            pass
                     self.allocation_table.setItem(i, 2, QTableWidgetItem(str(amount)))
 
+                    # Доход
                     income = row.get('Доход (тыс. руб)', '0')
-                    if isinstance(income, str):
-                        income = income.replace(',', '')
+                    if isinstance(income, (int, float)):
+                        if mode == 'basic':
+                            income = income / 1000
+                        income = self.format_thousands(income)
+                    elif isinstance(income, str) and income.replace('.', '').replace('-', '').isdigit():
+                        try:
+                            income_num = float(income)
+                            if mode == 'basic':
+                                income_num = income_num / 1000
+                            income = self.format_thousands(income_num)
+                        except ValueError:
+                            pass
                     self.allocation_table.setItem(i, 3, QTableWidgetItem(str(income)))
 
                     self.allocation_table.setItem(i, 4, QTableWidgetItem(str(row.get('Риск', ''))))
@@ -192,7 +250,7 @@ class ResultsTab(QWidget):
             if 'analysis_text' in solution:
                 self.constraints_text.setText(solution['analysis_text'])
             elif constraints_df is not None and not constraints_df.empty:
-                text = path_info
+                text = path_info if 'path_info' in locals() else ""
                 if text:
                     text += "\n\n📊 Результаты проверки ограничений:\n\n"
                 else:
@@ -212,14 +270,22 @@ class ResultsTab(QWidget):
                     dur_limit = row.get('Срок лимит', 2.5)
                     assets = row.get('Активы (тыс. руб)', 0)
 
+                    # Активы
+                    if isinstance(assets, (int, float)):
+                        if mode == 'basic':
+                            assets = assets / 1000
+                        assets_display = self.format_thousands(assets)
+                    else:
+                        assets_display = str(assets)
+
                     text += f"Месяц {month}: "
                     text += f"{risk_emoji} риск = {risk_fact:.2f} (лимит {risk_limit:.1f}), "
                     text += f"{dur_emoji} срок = {dur_fact:.2f} (лимит {dur_limit:.1f}), "
-                    text += f"активы = {assets:.2f} тыс. руб\n"
+                    text += f"активы = {assets_display} тыс. руб\n"
 
                 self.constraints_text.setText(text)
             else:
-                if path_info:
+                if 'path_info' in locals() and path_info:
                     self.constraints_text.setText(path_info)
                 else:
                     self.constraints_text.setText("Нет данных для анализа")
