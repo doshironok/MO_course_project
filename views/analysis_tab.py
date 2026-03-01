@@ -61,7 +61,7 @@ class AnalysisTab(QWidget):
         self.constraints_table.setColumnCount(8)
         self.constraints_table.setHorizontalHeaderLabels(
             ["Месяц", "Риск факт", "Риск лимит", "Статус",
-             "Срок факт", "Срок лимит", "Статус", "Активы (млн руб)"]
+             "Срок факт", "Срок лимит", "Статус", "Активы (тыс. руб)"]
         )
         self.constraints_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         constraints_layout.addWidget(self.constraints_table)
@@ -151,7 +151,7 @@ class AnalysisTab(QWidget):
                     self.constraints_table.setItem(i, 6, status_item)
 
                     # Активы
-                    self.constraints_table.setItem(i, 7, QTableWidgetItem(f"{row.get('Активы (млн руб)', 0):.2f}"))
+                    self.constraints_table.setItem(i, 7, QTableWidgetItem(f"{row.get('Активы (тыс. руб)', 0):.2f}"))
             else:
                 self.constraints_table.setRowCount(1)
                 self.constraints_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
@@ -188,20 +188,20 @@ class AnalysisTab(QWidget):
                     if i < len(variables) and val > 1e-3 and variables[i]['start_month'] == 1:
                         initial_sum += val
 
-            text += f"💰 Начальные инвестиции: {initial_sum/1000:.2f} млн руб\n"
+            text += f"💰 Начальные инвестиции: {initial_sum/1000:.2f} тыс. руб\n"
 
             # Доходность
             total_income = self.current_solution.get('total_income', 0)
             if total_income is None:
                 total_income = 0
-            text += f"📈 Общая доходность: {total_income/1000:.2f} млн руб\n\n"
+            text += f"📈 Общая доходность: {total_income/1000:.2f} тыс. руб\n\n"
 
             # Анализ инвестиций
             allocation = self.current_solution.get('allocation', {})
             if allocation:
                 text += "📊 Распределение:\n"
                 for key, alloc in allocation.items():
-                    text += f"  • {key}: {alloc['amount']/1000:.2f} млн руб (доход {alloc['income']/1000:.2f} млн руб)\n"
+                    text += f"  • {key}: {alloc['amount']/1000:.2f} тыс. руб (доход {alloc['income']/1000:.2f} млн руб)\n"
 
             self.conclusions_text.setText(text)
 
