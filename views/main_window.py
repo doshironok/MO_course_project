@@ -1,6 +1,7 @@
 """
 Модуль главного окна приложения
 """
+import traceback
 from turtle import pd
 
 from PyQt6.QtWidgets import *

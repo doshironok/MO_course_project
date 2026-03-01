@@ -121,58 +121,83 @@ class ResultsTab(QWidget):
                 self.allocation_table.setRowCount(0)
                 return
 
-            # Расчет начальных инвестиций (только месяц 1)
-            initial_sum = 0
-            x = solution.get('x', [])
-            variables = solution.get('variables', [])
-            if x is not None and len(x) > 0:
-                for i, val in enumerate(x):
-                    if i < len(variables) and val > 1e-3 and variables[i]['start_month'] == 1:
-                        initial_sum += val
+            # ===== РАСЧЕТ НАЧАЛЬНОГО ФОНДА =====
+            if solution.get('mode') == 'basic' and 'path' in solution:
+                fund_value = solution['fun']
+                path_info = f"✅ ВЫБРАН ПУТЬ: {solution['path']}\n"
+                if 'details' in solution:
+                    path_info += "Детали:\n"
+                    for k, v in solution['details'].items():
+                        path_info += f"  {k}: {v:.2f} тыс. руб\n"
+            else:
+                x = solution.get('x', [])
+                fund_value = sum(x) if x is not None else 0
+                path_info = ""
 
-            print(f"initial_sum = {initial_sum:.2f} тыс. руб")
-            self.fund_label.setText(f"{initial_sum:,.0f}".replace(',', ' '))
+                if fund_value > 0:
+                    path_info = f"💰 Всего инвестиций: {fund_value:.2f} тыс. руб\n"
+                    variables = solution.get('variables', [])
+                    month1_sum = sum(x[i] for i, var in enumerate(variables)
+                                     if var['start_month'] == 1 and x[i] > 1e-3)
+                    if month1_sum > 0:
+                        path_info += f"   Из них в месяц 1: {month1_sum:.2f} тыс. руб\n"
 
-            # Общая доходность
+            # УБИРАЕМ округление до тысяч
+            self.fund_label.setText(f"{fund_value:.0f}".replace(',', ' '))
+            print(f"fund_value = {fund_value:.2f} тыс. руб")
+
+            # ===== ОБЩАЯ ДОХОДНОСТЬ =====
             total_income = solution.get('total_income', 0)
             if total_income is None:
                 total_income = 0
-            self.income_label.setText(f"{total_income:,.0f}".replace(',', ' '))
+            # УБИРАЕМ округление до тысяч
+            self.income_label.setText(f"{total_income:.0f}".replace(',', ' '))
 
-            # Количество инвестиций
+            # ===== КОЛИЧЕСТВО ИНВЕСТИЦИЙ =====
             allocation = solution.get('allocation', {})
             if allocation is None:
                 allocation = {}
             self.count_label.setText(str(len(allocation)))
 
-            # Режим расчета
+            # ===== РЕЖИМ РАСЧЕТА =====
             mode_names = {'basic': 'Без ограничений', 'risk': 'С риском', 'full': 'Полный'}
             mode = solution.get('mode', '')
             self.mode_label.setText(mode_names.get(mode, mode))
 
-            # Таблица распределения (в тыс. руб)
+            # ===== ТАБЛИЦА РАСПРЕДЕЛЕНИЯ =====
             if allocation_df is not None and not allocation_df.empty:
                 self.allocation_table.setRowCount(len(allocation_df))
                 for i in range(len(allocation_df)):
                     row = allocation_df.iloc[i]
+
                     self.allocation_table.setItem(i, 0, QTableWidgetItem(str(row.get('Инструмент', ''))))
                     self.allocation_table.setItem(i, 1, QTableWidgetItem(str(row.get('Месяц начала', ''))))
 
-                    # Сумма в тыс. руб
+                    # УБИРАЕМ форматирование с запятыми
                     amount = row.get('Сумма (тыс. руб)', '0')
+                    if isinstance(amount, str):
+                        amount = amount.replace(',', '')
                     self.allocation_table.setItem(i, 2, QTableWidgetItem(str(amount)))
 
-                    # Доход в тыс. руб
                     income = row.get('Доход (тыс. руб)', '0')
+                    if isinstance(income, str):
+                        income = income.replace(',', '')
                     self.allocation_table.setItem(i, 3, QTableWidgetItem(str(income)))
 
                     self.allocation_table.setItem(i, 4, QTableWidgetItem(str(row.get('Риск', ''))))
             else:
                 self.allocation_table.setRowCount(0)
 
-            # Анализ ограничений
-            if constraints_df is not None and not constraints_df.empty:
-                text = "📊 Результаты проверки ограничений:\n\n"
+            # ===== АНАЛИЗ ОГРАНИЧЕНИЙ =====
+            if 'analysis_text' in solution:
+                self.constraints_text.setText(solution['analysis_text'])
+            elif constraints_df is not None and not constraints_df.empty:
+                text = path_info
+                if text:
+                    text += "\n\n📊 Результаты проверки ограничений:\n\n"
+                else:
+                    text = "📊 Результаты проверки ограничений:\n\n"
+
                 for _, row in constraints_df.iterrows():
                     risk_status = row.get('Риск статус', '')
                     dur_status = row.get('Срок статус', '')
@@ -190,10 +215,14 @@ class ResultsTab(QWidget):
                     text += f"Месяц {month}: "
                     text += f"{risk_emoji} риск = {risk_fact:.2f} (лимит {risk_limit:.1f}), "
                     text += f"{dur_emoji} срок = {dur_fact:.2f} (лимит {dur_limit:.1f}), "
-                    text += f"активы = {assets:,.0f} тыс. руб\n"
+                    text += f"активы = {assets:.2f} тыс. руб\n"
+
                 self.constraints_text.setText(text)
             else:
-                self.constraints_text.setText("Нет данных для анализа")
+                if path_info:
+                    self.constraints_text.setText(path_info)
+                else:
+                    self.constraints_text.setText("Нет данных для анализа")
 
             print("=== DISPLAY RESULTS FINISHED ===\n")
 
