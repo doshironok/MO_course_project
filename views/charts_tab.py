@@ -166,23 +166,23 @@ class ChartsTab(QWidget):
 
         # Цветовая схема
         colors = [COLORS['primary'], COLORS['primary_light'],
-                 '#4A7DB5', '#6C8EB5']
+                  '#4A7DB5', '#6C8EB5']
 
         bars = self.canvas.axes.bar(names, values, color=colors[:len(names)],
-                                   edgecolor=COLORS['border'], linewidth=2)
+                                    edgecolor=COLORS['border'], linewidth=2)
 
         self.canvas.axes.set_title('Структура инвестиционного портфеля по инструментам',
-                                  color=COLORS['primary'], fontsize=14, fontweight='bold')
+                                   color=COLORS['primary'], fontsize=14, fontweight='bold')
         self.canvas.axes.set_xlabel('Инструмент', color=COLORS['text'])
         self.canvas.axes.set_ylabel('Сумма инвестиций (млн руб)', color=COLORS['text'])
 
         # Добавление подписей значений
         for bar in bars:
             height = bar.get_height()
-            self.canvas.axes.text(bar.get_x() + bar.get_width()/2., height,
-                                 f'{height:,.1f}'.replace(',', ' '),
-                                 ha='center', va='bottom', fontweight='bold',
-                                 color=COLORS['primary'])
+            self.canvas.axes.text(bar.get_x() + bar.get_width() / 2., height,
+                                  f'{height:,.2f}'.replace(',', ' '),
+                                  ha='center', va='bottom', fontweight='bold',
+                                  color=COLORS['primary'])
 
         self.canvas.axes.grid(True, alpha=0.3, color=COLORS['border'])
         self.canvas.axes.set_axisbelow(True)
@@ -264,20 +264,20 @@ class ChartsTab(QWidget):
             colors = [COLORS['primary'], COLORS['primary_light'], '#4A7DB5']
 
             bars = self.canvas.axes.bar([mode_names.get(mode, mode)], [fun_value],
-                                       color=colors[0], alpha=0.8,
-                                       edgecolor=COLORS['border'], linewidth=2)
+                                        color=colors[0], alpha=0.8,
+                                        edgecolor=COLORS['border'], linewidth=2)
 
             self.canvas.axes.set_title('Начальный фонд для текущего сценария',
-                                      color=COLORS['primary'], fontsize=14, fontweight='bold')
+                                       color=COLORS['primary'], fontsize=14, fontweight='bold')
             self.canvas.axes.set_ylabel('Начальный фонд (млн руб)', color=COLORS['text'])
 
             # Добавление подписи значения
             for bar in bars:
                 height = bar.get_height()
-                self.canvas.axes.text(bar.get_x() + bar.get_width()/2., height,
-                                     f'{height:,.1f}'.replace(',', ' '),
-                                     ha='center', va='bottom', fontweight='bold',
-                                     color=COLORS['primary'])
+                self.canvas.axes.text(bar.get_x() + bar.get_width() / 2., height,
+                                      f'{height:,.2f}'.replace(',', ' '),
+                                      ha='center', va='bottom', fontweight='bold',
+                                      color=COLORS['primary'])
 
         self.canvas.axes.grid(True, alpha=0.3, color=COLORS['border'])
         self.canvas.axes.set_axisbelow(True)

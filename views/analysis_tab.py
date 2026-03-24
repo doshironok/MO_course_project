@@ -61,7 +61,7 @@ class AnalysisTab(QWidget):
         self.constraints_table.setColumnCount(8)
         self.constraints_table.setHorizontalHeaderLabels(
             ["Месяц", "Риск факт", "Риск лимит", "Статус",
-             "Срок факт", "Срок лимит", "Статус", "Активы (тыс. руб)"]
+             "Срок факт", "Срок лимит", "Статус", "Активы (млн руб)"]
         )
         self.constraints_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         constraints_layout.addWidget(self.constraints_table)
@@ -95,6 +95,16 @@ class AnalysisTab(QWidget):
         except Exception as e:
             print(f"❌ ОШИБКА В SET_DATA: {e}")
             traceback.print_exc()
+
+    def format_millions(self, value):
+        """Форматирование числа в млн руб"""
+        try:
+            if value is None:
+                return "0.00"
+            num_value = float(value)
+            return f"{num_value:,.2f}".replace(",", " ")
+        except (ValueError, TypeError):
+            return str(value)
 
     def update_display(self):
         """Обновление отображения"""
@@ -150,8 +160,9 @@ class AnalysisTab(QWidget):
                         status_item.setForeground(QBrush(Qt.GlobalColor.red))
                     self.constraints_table.setItem(i, 6, status_item)
 
-                    # Активы
-                    self.constraints_table.setItem(i, 7, QTableWidgetItem(f"{row.get('Активы (тыс. руб)', 0):.2f}"))
+                    # Активы (в млн руб)
+                    assets = row.get('Активы (млн руб)', 0)
+                    self.constraints_table.setItem(i, 7, QTableWidgetItem(self.format_millions(assets)))
             else:
                 self.constraints_table.setRowCount(1)
                 self.constraints_table.setItem(0, 0, QTableWidgetItem("Нет данных"))
@@ -178,30 +189,20 @@ class AnalysisTab(QWidget):
             if initial_fund is None:
                 initial_fund = 0
 
-            # Считаем только инвестиции в месяце 1
-            x = self.current_solution.get('x', [])
-            variables = self.current_solution.get('variables', [])
-
-            initial_sum = 0
-            if x is not None and len(x) > 0:
-                for i, val in enumerate(x):
-                    if i < len(variables) and val > 1e-3 and variables[i]['start_month'] == 1:
-                        initial_sum += val
-
-            text += f"💰 Начальные инвестиции: {initial_sum/1000:.2f} тыс. руб\n"
+            text += f"💰 Начальные инвестиции: {self.format_millions(initial_fund)} млн руб\n"
 
             # Доходность
             total_income = self.current_solution.get('total_income', 0)
             if total_income is None:
                 total_income = 0
-            text += f"📈 Общая доходность: {total_income/1000:.2f} тыс. руб\n\n"
+            text += f"📈 Общая доходность: {self.format_millions(total_income)} млн руб\n\n"
 
             # Анализ инвестиций
             allocation = self.current_solution.get('allocation', {})
             if allocation:
                 text += "📊 Распределение:\n"
                 for key, alloc in allocation.items():
-                    text += f"  • {key}: {alloc['amount']/1000:.2f} тыс. руб (доход {alloc['income']/1000:.2f} млн руб)\n"
+                    text += f"  • {key}: {self.format_millions(alloc['amount'])} млн руб (доход {self.format_millions(alloc['income'])} млн руб)\n"
 
             self.conclusions_text.setText(text)
 

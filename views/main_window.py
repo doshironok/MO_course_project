@@ -158,14 +158,11 @@ class MainWindow(QMainWindow):
         toolbar.addAction(export_btn)
 
     def run_calculation(self, mode: str):
-        """
-        Запуск расчета в выбранном режиме
-        """
+        """Запуск расчета в выбранном режиме"""
         try:
             self.status_bar.showMessage(f"Выполняется расчет ({mode})...")
             QApplication.processEvents()
 
-            # Получение исходных данных
             input_data = self.input_tab.get_input_data()
 
             if not input_data['success']:
@@ -175,43 +172,42 @@ class MainWindow(QMainWindow):
 
             print(f"\n🔴 ЗАПУСК РАСЧЕТА В РЕЖИМЕ: {mode}")
 
-            # Построение модели
-            model = self.optimizer.build_model(
-                investments=input_data['investments'],
-                payments=input_data['payments'],
-                risk_limit=input_data['risk_limit'],
-                duration_limit=input_data['duration_limit'],
-                mode=mode
-            )
-
-            # Решение в зависимости от режима
             if mode == 'basic':
-                # Для basic используем специальный метод поиска оптимального пути
-                solution = self.optimizer.solve_basic(model)
+                # Для BASIC используем старый метод (или тоже симплекс, но с ограничениями)
+                # Можно использовать симплекс без ограничений
+                model = self.optimizer.build_simplex_model(
+                    investments=input_data['investments'],
+                    payments=input_data['payments'],
+                    risk_limit=input_data['risk_limit'],
+                    duration_limit=input_data['duration_limit'],
+                    mode='basic'  # без ограничений по риску и сроку
+                )
+                solution = self.optimizer.solve_simplex(model)
             else:
-                # Для risk и full используем обычный solve
-                solution = self.optimizer.solve(model)
+                # Для RISK и FULL используем симплекс-метод
+                model = self.optimizer.build_simplex_model(
+                    investments=input_data['investments'],
+                    payments=input_data['payments'],
+                    risk_limit=input_data['risk_limit'],
+                    duration_limit=input_data['duration_limit'],
+                    mode=mode
+                )
+                solution = self.optimizer.solve_simplex(model)
 
-            # Сохранение результатов
             self.current_solution = solution
-
-            # Получение таблиц для отображения
             self.current_constraints_df = self.optimizer.check_constraints(solution)
             self.current_allocation_df = self.optimizer.get_allocation_dataframe(solution)
 
-            # Обновление вкладок
             self.results_tab.display_results(solution, self.current_constraints_df, self.current_allocation_df)
             self.charts_tab.set_solution(solution)
             self.analysis_tab.set_data(solution, self.current_constraints_df, self.current_allocation_df)
 
-            # Переключение на вкладку результатов
             self.tab_widget.setCurrentIndex(1)
 
-            mode_names = {'basic': 'без ограничений', 'risk': 'с риском', 'full': 'полный'}
-            if solution['success']:
-                self.status_bar.showMessage(f"✅ Расчет ({mode_names[mode]}) выполнен успешно")
+            if solution.get('success', False):
+                self.status_bar.showMessage(f"✅ Расчет ({mode}) выполнен успешно")
             else:
-                self.status_bar.showMessage(f"❌ Ошибка при расчете: {solution['message']}")
+                self.status_bar.showMessage(f"❌ Ошибка при расчете: {solution.get('message', 'Неизвестная ошибка')}")
 
         except Exception as e:
             print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}")
