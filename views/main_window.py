@@ -2,7 +2,6 @@
 Модуль главного окна приложения
 """
 import traceback
-from turtle import pd
 
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
@@ -12,6 +11,7 @@ from views.input_tab import InputTab
 from views.results_tab import ResultsTab
 from views.charts_tab import ChartsTab
 from views.analysis_tab import AnalysisTab
+from views.simplex_tab import SimplexTab
 from models.optimizer import InvestmentOptimizer
 from controllers.file_manager import FileManager
 from controllers.export_manager import ExportManager
@@ -48,15 +48,17 @@ class MainWindow(QMainWindow):
         self.results_tab = ResultsTab()
         self.charts_tab = ChartsTab()
         self.analysis_tab = AnalysisTab()
+        self.simplex_tab = SimplexTab()
 
         # Подключение сигналов
         self.input_tab.calculationRequested.connect(self.run_calculation)
 
         # Добавление вкладок
-        self.tab_widget.addTab(self.input_tab, "Ввод данных")
-        self.tab_widget.addTab(self.results_tab, "Результаты")
-        self.tab_widget.addTab(self.charts_tab, "Графики")
-        self.tab_widget.addTab(self.analysis_tab, "Анализ")
+        self.tab_widget.addTab(self.input_tab, "📝 Ввод данных")
+        self.tab_widget.addTab(self.results_tab, "📊 Результаты")
+        self.tab_widget.addTab(self.charts_tab, "📈 Графики")
+        self.tab_widget.addTab(self.analysis_tab, "🔍 Анализ")
+        self.tab_widget.addTab(self.simplex_tab, "📐 Симплекс-метод")
 
         # Создание меню
         self.create_menu()
@@ -77,45 +79,54 @@ class MainWindow(QMainWindow):
         file_menu = menubar.addMenu("Файл")
 
         new_action = QAction("Новый расчет", self)
+        new_action.setShortcut(QKeySequence.StandardKey.New)
         new_action.triggered.connect(self.new_calculation)
         file_menu.addAction(new_action)
 
         open_action = QAction("Открыть проект", self)
+        open_action.setShortcut(QKeySequence.StandardKey.Open)
         open_action.triggered.connect(self.open_project)
         file_menu.addAction(open_action)
 
         save_action = QAction("Сохранить проект", self)
+        save_action.setShortcut(QKeySequence.StandardKey.Save)
         save_action.triggered.connect(self.save_project)
         file_menu.addAction(save_action)
 
         file_menu.addSeparator()
 
         export_pdf_action = QAction("Экспорт в PDF", self)
+        export_pdf_action.setShortcut(QKeySequence("Ctrl+P"))
         export_pdf_action.triggered.connect(self.export_pdf)
         file_menu.addAction(export_pdf_action)
 
         export_excel_action = QAction("Экспорт в Excel", self)
+        export_excel_action.setShortcut(QKeySequence("Ctrl+E"))
         export_excel_action.triggered.connect(self.export_excel)
         file_menu.addAction(export_excel_action)
 
         file_menu.addSeparator()
 
         exit_action = QAction("Выход", self)
+        exit_action.setShortcut(QKeySequence.StandardKey.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
 
         # Меню Расчет
         calc_menu = menubar.addMenu("Расчет")
 
-        basic_action = QAction("Без ограничений", self)
+        basic_action = QAction("Без ограничений (BASIC)", self)
+        basic_action.setShortcut(QKeySequence("F5"))
         basic_action.triggered.connect(lambda: self.run_calculation('basic'))
         calc_menu.addAction(basic_action)
 
-        risk_action = QAction("С учетом риска", self)
+        risk_action = QAction("С учетом риска (RISK)", self)
+        risk_action.setShortcut(QKeySequence("F6"))
         risk_action.triggered.connect(lambda: self.run_calculation('risk'))
         calc_menu.addAction(risk_action)
 
-        full_action = QAction("Полный расчет", self)
+        full_action = QAction("Полный расчет (FULL)", self)
+        full_action.setShortcut(QKeySequence("F7"))
         full_action.triggered.connect(lambda: self.run_calculation('full'))
         calc_menu.addAction(full_action)
 
@@ -123,6 +134,7 @@ class MainWindow(QMainWindow):
         help_menu = menubar.addMenu("Справка")
 
         about_action = QAction("О программе", self)
+        about_action.setShortcut(QKeySequence("F1"))
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
@@ -133,27 +145,33 @@ class MainWindow(QMainWindow):
     def create_toolbar(self):
         """Создание панели инструментов"""
         toolbar = self.addToolBar("Инструменты")
+        toolbar.setMovable(False)
 
         # Кнопки быстрого доступа
-        basic_btn = QAction("Без ограничений", self)
+        basic_btn = QAction("BASIC", self)
+        basic_btn.setToolTip("Расчет без ограничений (F5)")
         basic_btn.triggered.connect(lambda: self.run_calculation('basic'))
         toolbar.addAction(basic_btn)
 
-        risk_btn = QAction("С риском", self)
+        risk_btn = QAction("RISK", self)
+        risk_btn.setToolTip("Расчет с учетом риска (F6)")
         risk_btn.triggered.connect(lambda: self.run_calculation('risk'))
         toolbar.addAction(risk_btn)
 
-        full_btn = QAction("Полный", self)
+        full_btn = QAction("FULL", self)
+        full_btn.setToolTip("Полный расчет (F7)")
         full_btn.triggered.connect(lambda: self.run_calculation('full'))
         toolbar.addAction(full_btn)
 
         toolbar.addSeparator()
 
-        save_btn = QAction("Сохранить", self)
+        save_btn = QAction("💾 Сохранить", self)
+        save_btn.setToolTip("Сохранить проект (Ctrl+S)")
         save_btn.triggered.connect(self.save_project)
         toolbar.addAction(save_btn)
 
-        export_btn = QAction("Экспорт", self)
+        export_btn = QAction("📊 Экспорт", self)
+        export_btn.setToolTip("Экспорт в Excel (Ctrl+E)")
         export_btn.triggered.connect(self.export_excel)
         toolbar.addAction(export_btn)
 
@@ -170,42 +188,48 @@ class MainWindow(QMainWindow):
                 self.status_bar.showMessage("Ошибка ввода данных")
                 return
 
-            print(f"\n🔴 ЗАПУСК РАСЧЕТА В РЕЖИМЕ: {mode}")
+            print(f"\n{'='*80}")
+            print(f"ЗАПУСК РАСЧЕТА В РЕЖИМЕ: {mode.upper()}")
+            print(f"{'='*80}")
 
-            if mode == 'basic':
-                # Для BASIC используем старый метод (или тоже симплекс, но с ограничениями)
-                # Можно использовать симплекс без ограничений
-                model = self.optimizer.build_simplex_model(
-                    investments=input_data['investments'],
-                    payments=input_data['payments'],
-                    risk_limit=input_data['risk_limit'],
-                    duration_limit=input_data['duration_limit'],
-                    mode='basic'  # без ограничений по риску и сроку
-                )
-                solution = self.optimizer.solve_simplex(model)
-            else:
-                # Для RISK и FULL используем симплекс-метод
-                model = self.optimizer.build_simplex_model(
-                    investments=input_data['investments'],
-                    payments=input_data['payments'],
-                    risk_limit=input_data['risk_limit'],
-                    duration_limit=input_data['duration_limit'],
-                    mode=mode
-                )
-                solution = self.optimizer.solve_simplex(model)
+            # Построение модели
+            model = self.optimizer.build_simplex_model(
+                investments=input_data['investments'],
+                payments=input_data['payments'],
+                risk_limit=input_data['risk_limit'],
+                duration_limit=input_data['duration_limit'],
+                mode=mode
+            )
+
+            # Решение симплекс-методом
+            solution = self.optimizer.solve_simplex(model)
 
             self.current_solution = solution
             self.current_constraints_df = self.optimizer.check_constraints(solution)
             self.current_allocation_df = self.optimizer.get_allocation_dataframe(solution)
 
+            # Отображение результатов во всех вкладках
             self.results_tab.display_results(solution, self.current_constraints_df, self.current_allocation_df)
             self.charts_tab.set_solution(solution)
             self.analysis_tab.set_data(solution, self.current_constraints_df, self.current_allocation_df)
 
+            # Передача итераций симплекс-метода в соответствующую вкладку
+            simplex_iterations = solution.get('simplex_iterations', [])
+            self.simplex_tab.set_iterations(simplex_iterations, mode)
+
+            # Переключение на вкладку результатов
             self.tab_widget.setCurrentIndex(1)
 
             if solution.get('success', False):
-                self.status_bar.showMessage(f"✅ Расчет ({mode}) выполнен успешно")
+                fun_value = solution.get('fun', 0)
+                iterations_count = len(simplex_iterations)
+                phase1_count = len([it for it in simplex_iterations if it.get('phase') == 1])
+                phase2_count = len([it for it in simplex_iterations if it.get('phase') == 2])
+
+                self.status_bar.showMessage(
+                    f"✅ Расчет ({mode}) выполнен успешно. F = {fun_value:.2f} млн руб. "
+                    f"Симплекс: {phase1_count}+{phase2_count} итераций"
+                )
             else:
                 self.status_bar.showMessage(f"❌ Ошибка при расчете: {solution.get('message', 'Неизвестная ошибка')}")
 
@@ -213,6 +237,7 @@ class MainWindow(QMainWindow):
             print(f"❌ КРИТИЧЕСКАЯ ОШИБКА: {e}")
             traceback.print_exc()
             QMessageBox.critical(self, "Ошибка", f"Критическая ошибка: {str(e)}")
+            self.status_bar.showMessage(f"❌ Ошибка: {str(e)[:50]}")
 
     def new_calculation(self):
         """Начать новый расчет"""
@@ -225,6 +250,7 @@ class MainWindow(QMainWindow):
             self.results_tab.clear()
             self.charts_tab.set_solution(None)
             self.analysis_tab.set_data(None, None, None)
+            self.simplex_tab.set_iterations([], "")
             self.current_solution = None
             self.tab_widget.setCurrentIndex(0)
             self.status_bar.showMessage("Новый расчет")
@@ -247,7 +273,8 @@ class MainWindow(QMainWindow):
                     'fun': float(self.current_solution['fun']) if self.current_solution['fun'] else None,
                     'mode': self.current_solution['mode'],
                     'success': self.current_solution['success'],
-                    'message': self.current_solution['message']
+                    'message': self.current_solution['message'],
+                    'total_income': self.current_solution.get('total_income', 0)
                 }
             }
 
@@ -321,12 +348,11 @@ class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("О программе")
-        self.resize(1000, 600)  # Используем resize вместо setMinimumWidth
+        self.resize(1000, 600)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(30, 30, 30, 30)
 
-        # Текст с информацией
         text_edit = QTextEdit()
         text_edit.setReadOnly(True)
         text_edit.setHtml("""
@@ -366,7 +392,6 @@ class AboutDialog(QDialog):
 
         layout.addWidget(text_edit)
 
-        # Кнопка закрытия
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         button_box.accepted.connect(self.accept)
         layout.addWidget(button_box)
@@ -375,19 +400,17 @@ class AboutDialog(QDialog):
 
 
 class GuideDialog(QDialog):
-    """Диалоговое окно 'Руководство пользователя' с увеличенным размером"""
+    """Диалоговое окно 'Руководство пользователя'"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Руководство пользователя")
-        # Увеличиваем размер в 2 раза
         self.setMinimumWidth(900)
         self.setMinimumHeight(600)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(30, 30, 30, 30)
 
-        # Текст с руководством
         text_edit = QTextEdit()
         text_edit.setReadOnly(True)
         text_edit.setFont(QFont("Segoe UI", 12))
@@ -404,9 +427,9 @@ class GuideDialog(QDialog):
 
             <div style='margin: 35px 30px;'>
                 <h3 style='color: #1560BD; margin: 25px 0 20px 0; font-size: 22px;'>2. Выбор режима расчета</h3>
-                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Без ограничений</b> - минимизация начального фонда без учета риска и срока</p>
-                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>С учетом риска</b> - с ограничением средневзвешенного риска ≤ 6</p>
-                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Полный расчет</b> - с ограничениями по риску и сроку погашения ≤ 2.5 месяца</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>BASIC</b> - минимизация начального фонда без учета риска и срока</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>RISK</b> - с ограничением средневзвешенного риска ≤ 6</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>FULL</b> - с ограничениями по риску и сроку погашения ≤ 2.5 месяца</p>
             </div>
 
             <div style='margin: 35px 30px;'>
@@ -414,6 +437,7 @@ class GuideDialog(QDialog):
                 <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Вкладка "Результаты"</b> - табличные данные и анализ ограничений</p>
                 <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Вкладка "Графики"</b> - визуализация структуры портфеля и динамики показателей</p>
                 <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Вкладка "Анализ"</b> - детальная информация и ответы на вопросы задания</p>
+                <p style='margin: 12px 0 12px 35px; font-size: 14px; line-height: 1.8;'>• <b>Вкладка "Симплекс-метод"</b> - пошаговое решение с симплекс-таблицами</p>
             </div>
 
             <div style='margin: 35px 30px;'>
@@ -440,7 +464,6 @@ class GuideDialog(QDialog):
 
         layout.addWidget(text_edit)
 
-        # Кнопка закрытия
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_button = button_box.button(QDialogButtonBox.StandardButton.Ok)
         ok_button.setText("Закрыть")
